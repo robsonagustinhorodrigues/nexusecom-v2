@@ -1,0 +1,100 @@
+Internal Server Error
+
+Livewire\Exceptions\PropertyNotFoundException
+State definition for [search] not found on component [integrations.anuncios].
+GET 127.0.0.1:8000
+PHP 8.2.30 — Laravel 11.48.0
+
+Expand
+vendor frames
+1 vendor frame collapsed
+
+resources/views/livewire/integrations/anuncios.blade.php
+:43
+call_user_func_array
+1 vendor frame collapsed
+
+storage/framework/views/4033dfcdcc5e9c9f057e284c173f2c38.php
+:51
+invoke
+6 vendor frames collapsed
+
+resources/views/livewire/integrations/anuncios.blade.php
+:40
+include
+71 vendor frames collapsed
+
+public/index.php
+:17
+require_once
+1 vendor frame collapsed
+resources/views/livewire/integrations/anuncios.blade.php :43
+    if (! $empresaId) {
+        return new \Illuminate\Pagination\LengthAwarePaginator([], 0, 10);
+    }
+ 
+    return MarketplaceAnuncio::tenant($empresaId)
+        ->when($this->search, fn ($q) => $q->where('titulo', 'like', "%{$this->search}%")
+            ->orWhere('external_id', 'like', "%{$this->search}%")
+            ->orWhere('sku', 'like', "%{$this->search}%"))
+        ->when($this->integracao_id, fn ($q) => $q->where('integracao_id', $this->integracao_id))
+        ->with(['sku.product', 'integracao'])
+        ->latest()
+        ->paginate(15);
+});
+ 
+$integracoes = computed(function () {
+    return Integracao::where('empresa_id', Auth::user()->current_empresa_id)->get();
+});
+Request
+GET /integrations/anuncios
+Headers
+host
+127.0.0.1:8000
+connection
+keep-alive
+cache-control
+max-age=0
+sec-ch-ua
+"Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"
+sec-ch-ua-mobile
+?0
+sec-ch-ua-platform
+"Linux"
+upgrade-insecure-requests
+1
+user-agent
+Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36
+accept
+text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7
+sec-fetch-site
+same-origin
+sec-fetch-mode
+navigate
+sec-fetch-dest
+document
+referer
+http://127.0.0.1:8000/integrations/anuncios
+accept-encoding
+gzip, deflate, br, zstd
+accept-language
+pt-PT,pt;q=0.9,en-US;q=0.8,en;q=0.7
+cookie
+XSRF-TOKEN=eyJpdiI6InhzY1hIMzJiclZSd3NQZmlLSm5ta2c9PSIsInZhbHVlIjoiSTA2UU5FSEw0d21VaWdLSFM3Q04xN2xTTU5rV0EvejVJblNGQ3BFRHo0ekFRMDdIWU5wQk1kdUpidlJicThmQ0xZdjd5VWd4RkkzaUZ0cm5ZT1MxR1VmQ3BIQVhSRTVkNWpsTzF6Y2hGWjhGTWZ1Tm1xNUc2VCtiSXg1THgzckciLCJtYWMiOiJhOGM0NjBiOTUyZDAyYjM4Y2YyODQ4MzIwMzFhNDE1ZjVkMDMyZWUwNmYxNGFkZjA4ODRiMDJmNTE5OTc5NzViIiwidGFnIjoiIn0%3D; nexusecom_session=eyJpdiI6IkNFU3JXNlpOeHVqWFpabm5kZDdlVUE9PSIsInZhbHVlIjoiMVFQcTBTTDJTbEU0bmdCNDFyUkk4VTVFdHhIczBrOWQ0dDY0cDlkNE1JMDcrNDJSY096c09xUncrR1pWcjlWUVcwWm5HRVg5eVNHRHpCbjI1dDg2OHcrOHRBZnFVYW90TEU4ZlRXSU11dmF0QktkdmQzTHZBM0RFTngvNnVJcDMiLCJtYWMiOiI3YTliMjA3NDM5MmY5ZWVmY2M5MTNkNjUwZWQ2MzFkYTI3NWIzMGQ0YzhlZDhhNDBkNDcyMmIwMjNlZjI4NmIzIiwidGFnIjoiIn0%3D
+Body
+No body data
+Application
+Routing
+controller
+Closure
+route name
+integrations.anuncios
+middleware
+web, auth
+Database Queries
+pgsql (554.84 ms)
+select * from "sessions" where "id" = 'roJIEtbsUUdof0YWtFE3hbUoUBfB9f8GER2qsu4V' limit 1
+pgsql (89.15 ms)
+select * from "users" where "id" = 1 limit 1
+pgsql (93.64 ms)
+select * from "integracoes" where "empresa_id" = 2

@@ -1,0 +1,25 @@
+shell
+
+# Iniciar
+/home/robson/nexusecom/start.sh start
+
+# Parar
+/home/robson/nexusecom/start.sh stop
+
+# Reiniciar
+/home/robson/nexusecom/start.sh restart
+Para iniciar automaticamente ao ligar (systemd):
+
+shell
+
+# Habilitar
+systemctl --user enable /home/robson/.config/systemd/user/nexusecom.service
+
+# Iniciar
+systemctl --user start nexusecom
+Resumo do que o script faz:
+
+1. php artisan serve - Servidor PHP na porta 8000
+2. php artisan queue:work - Processa jobs em background
+3. npm run dev - Compila assets (se houver)
+4. ngrok http 8000 - Tunnel (se instalado)

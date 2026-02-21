@@ -1,0 +1,5 @@
+referencia da api do bling para ver se esta tudo correto em nosso app com a integração do bling 
+https://developer.bling.com.br/build/assets/openapi-3CWCog4t.json
+
+ja vamos baixar pedido e nfes automaticamente e salvar no nosso sistema quando receber notificação no 
+integrations/bling/notification/callback

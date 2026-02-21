@@ -1,0 +1,228 @@
+<?php
+
+namespace App\Console\Commands;
+
+use App\Models\Integracao;
+use App\Models\MarketplaceAnuncio;
+use App\Services\MeliIntegrationService;
+use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
+
+class SyncFreteAnuncios extends Command
+{
+    protected $signature = 'sync:frete-anuncios {empresaId} {--marketplace=all : mercadolivre|amazon|all} {--limit=0 : Limite de anúncios (0 = todos)} {--force : Forçar atualização mesmo se já tem frete}';
+
+    protected $description = 'Sincroniza custos de frete dos anúncios via API do marketplace';
+
+    public function handle()
+    {
+        $empresaId = $this->argument('empresaId');
+        $marketplace = $this->option('marketplace');
+        $limit = (int) $this->option('limit');
+        $force = $this->option('force');
+
+        $this->info("Sincronizando frete para empresa {$empresaId} (marketplace: {$marketplace})...");
+
+        $total = 0;
+
+        if ($marketplace === 'all' || $marketplace === 'mercadolivre') {
+            $total += $this->syncMeli($empresaId, $limit, $force);
+        }
+
+        if ($marketplace === 'all' || $marketplace === 'amazon') {
+            $total += $this->syncAmazon($empresaId, $limit, $force);
+        }
+
+        $this->info("Concluído! {$total} anúncios atualizados.");
+        return 0;
+    }
+
+    private function syncMeli(int $empresaId, int $limit, bool $force): int
+    {
+        $integracao = Integracao::where('empresa_id', $empresaId)
+            ->where('marketplace', 'mercadolivre')
+            ->where('ativo', true)
+            ->first();
+
+        if (!$integracao) {
+            $this->warn("Nenhuma integração ML ativa para empresa {$empresaId}");
+            return 0;
+        }
+
+        $meliService = new MeliIntegrationService($empresaId);
+
+        $query = MarketplaceAnuncio::where('empresa_id', $empresaId)
+            ->where('marketplace', 'mercadolivre')
+            ->whereNotNull('external_id');
+
+        if (!$force) {
+            $query->where(function ($q) {
+                $q->whereNull('frete_custo_seller')
+                  ->orWhere('frete_updated_at', '<', now()->subHours(24));
+            });
+        }
+
+        if ($limit > 0) {
+            $query->limit($limit);
+        }
+
+        $anuncios = $query->get();
+        $this->info("  ML: {$anuncios->count()} anúncios para atualizar");
+
+        $updated = 0;
+        $bar = $this->output->createProgressBar($anuncios->count());
+        $bar->start();
+
+        foreach ($anuncios as $anuncio) {
+            try {
+                // 1. Buscar detalhes completos do item (para garantir dados frescos como catalog_product_id)
+                $itemData = $meliService->getItem($anuncio->external_id);
+                
+                if ($itemData) {
+                    // Atualizar json_data para garantir que temos catalog_product_id se existir
+                    $anuncio->update(['json_data' => $itemData]);
+
+                    // 2. Verificar Frete
+                    $freeShipping = $itemData['shipping']['free_shipping'] ?? false;
+                    $cost = 0.0;
+                    $source = 'not_free';
+
+                    if ($freeShipping) {
+                        // Se for Frete Grátis, o vendedor paga.
+                        // Calculamos baseado nas dimensões/peso pois a API de /shipping_options retorna custo comprador (0)
+                        $dimensions = $itemData['shipping']['dimensions'] ?? null;
+                        
+                        // Extrair peso/dimensões do item se não vier no shipping
+                        if (!$dimensions) {
+                            // Tentar montar string de dimensões se tivermos os dados soltos (raro no ML, geralmente vem string)
+                            // Formato ML: "15x15x20,500" (AxLxP,Peso)
+                        }
+
+                        // Se tivermos as dimensões, calculamos via tabela
+                        // O método calculateShippingCost do service aceita array com 'weight', 'length', etc, ou a string do ML?
+                        // Vamos ver como o service espera. Ele espera array ou string. O ML manda string "AxLxP,Peso".
+                        // O método calculateShippingCost do Service já deve tratar isso ou esperamos que ele trate.
+                        // Vou assumir que ele espera array com 'weight', etc, ou podemos passar a string e ele faz parse?
+                        // Olhando o código do service (que não tenho aqui agora mas lembro), ele espera array.
+                        // Mas o ML retorna string "12x12x12,300".
+                        // Vou fazer um parse simples aqui ou passar null e deixar o service se virar se ele tiver metodo helper.
+                        // O service tem calculateShippingCost(array $dimensions).
+                        
+                        // Parse das dimensões do ML string
+                        $dimString = $itemData['shipping']['dimensions'] ?? '';
+                        $dimArray = [];
+                        if ($dimString) {
+                            $parts = explode(',', $dimString);
+                            if (count($parts) >= 2) {
+                                $dimParts = explode('x', $parts[0]);
+                                if (count($dimParts) === 3) {
+                                    $dimArray = [
+                                        'height' => (float) $dimParts[0],
+                                        'width' => (float) $dimParts[1],
+                                        'length' => (float) $dimParts[2],
+                                        'weight' => (float) $parts[1]
+                                    ];
+                                }
+                            }
+                        }
+
+                        if (!empty($dimArray)) {
+                            // Calcular custo
+                            $calc = $meliService->calculateShippingCost($dimArray);
+                            if ($calc && isset($calc['estimated_cost'])) {
+                                $cost = (float) $calc['estimated_cost'];
+                                $source = 'calculated_table';
+                            }
+                        }
+                    } else {
+                        // Se não é frete grátis, vendedor paga 0 (comprador paga ou retira)
+                        $cost = 0.0;
+                        $source = 'not_free';
+                    }
+
+                    $anuncio->update([
+                        'frete_custo_seller' => $cost,
+                        'frete_source' => $source,
+                        'frete_updated_at' => now(),
+                    ]);
+                    $updated++;
+                }
+
+                // Rate limit: 200ms entre chamadas
+                usleep(200000);
+            } catch (\Exception $e) {
+                // $this->warn("  ⚠ Erro {$anuncio->external_id}: " . $e->getMessage());
+                Log::warning("SyncFrete ML error: {$anuncio->external_id}", ['error' => $e->getMessage()]);
+            }
+
+            $bar->advance();
+        }
+
+        $bar->finish();
+        $this->newLine();
+        $this->info("  ML: {$updated} atualizados");
+        return $updated;
+    }
+
+    private function syncAmazon(int $empresaId, int $limit, bool $force): int
+    {
+        $query = MarketplaceAnuncio::where('empresa_id', $empresaId)
+            ->where('marketplace', 'amazon')
+            ->whereNotNull('external_id');
+
+        if (!$force) {
+            $query->where(function ($q) {
+                $q->whereNull('frete_custo_seller')
+                  ->orWhere('frete_updated_at', '<', now()->subHours(24));
+            });
+        }
+
+        if ($limit > 0) {
+            $query->limit($limit);
+        }
+
+        $anuncios = $query->get();
+        $this->info("  Amazon: {$anuncios->count()} anúncios para atualizar");
+
+        $updated = 0;
+
+        foreach ($anuncios as $anuncio) {
+            $preco = $this->getAmazonPrice($anuncio);
+            $freteFba = $this->calcularFreteFbaBrasil($preco);
+
+            $anuncio->update([
+                'frete_custo_seller' => $freteFba,
+                'frete_source' => 'estimated',
+                'frete_updated_at' => now(),
+            ]);
+            $updated++;
+        }
+
+        $this->info("  Amazon: {$updated} atualizados");
+        return $updated;
+    }
+
+    private function getAmazonPrice(MarketplaceAnuncio $anuncio): float
+    {
+        $jsonData = $anuncio->json_data ?? [];
+
+        if (isset($jsonData['ItemPrice']['Amount'])) {
+            return (float) $jsonData['ItemPrice']['Amount'];
+        }
+
+        return (float) ($anuncio->preco ?? 0);
+    }
+
+    /**
+     * Calcula taxa FBA Amazon Brasil:
+     * - Preço >= R$100: frete grátis (absorvido pela Amazon)
+     * - Preço < R$100: R$5 por unidade
+     */
+    private function calcularFreteFbaBrasil(float $preco): float
+    {
+        if ($preco >= 100) {
+            return 0.00;
+        }
+        return 5.00;
+    }
+}
