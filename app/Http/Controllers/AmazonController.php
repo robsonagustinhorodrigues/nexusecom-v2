@@ -8,6 +8,11 @@ use Illuminate\Support\Facades\Auth;
 
 class AmazonController extends Controller
 {
+    public function showConnectForm()
+    {
+        return view('admin.amazon-connect');
+    }
+
     public function connect(Request $request)
     {
         $request->validate([
@@ -92,5 +97,48 @@ class AmazonController extends Controller
         }
 
         return redirect()->route('integrations.index')->with('message', 'Inventário sincronizado com sucesso!');
+    }
+
+    public function updateNome(Request $request)
+    {
+        $request->validate([
+            'nome' => 'required|string|max:100',
+        ]);
+
+        $empresaId = Auth::user()->current_empresa_id;
+        $amazonService = new AmazonIntegrationService($empresaId);
+
+        if (! $amazonService->isConnected()) {
+            return redirect()->route('integrations.index')->with('error', 'Amazon não conectado.');
+        }
+
+        $integracao = $amazonService->getIntegracao();
+        if ($integracao) {
+            $integracao->update(['nome_conta' => $request->nome]);
+
+            return redirect()->route('integrations.index')->with('message', 'Nome atualizado com sucesso!');
+        }
+
+        return redirect()->route('integrations.index')->with('error', 'Erro ao atualizar nome.');
+    }
+
+    public function testConnection()
+    {
+        $empresaId = Auth::user()->current_empresa_id;
+        $amazonService = new AmazonIntegrationService($empresaId);
+
+        if (! $amazonService->isConnected()) {
+            return response()->json(['success' => false, 'message' => 'Amazon não conectado.']);
+        }
+
+        try {
+            return response()->json([
+                'success' => true,
+                'message' => 'Conexão OK!',
+                'data' => ['status' => 'connected'],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => 'Erro: '.$e->getMessage()]);
+        }
     }
 }

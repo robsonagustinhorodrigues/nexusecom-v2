@@ -15,20 +15,47 @@
         <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
             <div class="flex items-center gap-4">
                 <a href="/products" class="text-gray-500 hover:text-gray-700">
+            <!-- User Dropdown -->
+            <div class="relative" x-data="{ open: false }">
+                <button @click="open = !open" class="flex items-center gap-2 pl-3 border-l border-gray-300 pr-2 py-1 rounded-lg hover:bg-gray-100 transition">
+                    <div class="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-sm font-bold text-white">R</div>
+                    <i class="fas fa-chevron-down text-xs text-gray-500"></i>
+                </button>
+                <div x-show="open" @click.away="open = false" x-transition class="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50">
+                    <div class="px-4 py-2 border-b border-gray-100">
+                        <p class="text-sm font-medium text-gray-900">Robson</p>
+                        <p class="text-xs text-gray-500">robson@email.com</p>
+                    </div>
+                    <form method="POST" action="{{ route('logout') }}">
+                        @csrf
+                        <button type="submit" class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-red-600 flex items-center gap-2">
+                            <i class="fas fa-sign-out-alt"></i> Sair
+                        </button>
+                    </form>
+                </div>
+            </div>
                     <i class="fas fa-arrow-left"></i>
                 </a>
                 <h1 class="text-xl font-bold text-gray-900">
                     <span x-text="editMode ? 'Editar Produto' : 'Novo Produto'"></span>
                 </h1>
             </div>
-            <button 
-                @click="save()" 
-                :disabled="saving"
-                class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-            >
-                <span x-show="!saving"><i class="fas fa-save mr-2"></i>Salvar</span>
-                <span x-show="saving"><i class="fas fa-spinner fa-spin mr-2"></i>Salvando...</span>
-            </button>
+            <div class="flex items-center gap-3">
+                <form method="POST" action="{{ route('logout') }}">
+                    @csrf
+                    <button type="submit" class="p-2 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-red-600" title="Sair">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </form>
+                <button 
+                    @click="save()" 
+                    :disabled="saving"
+                    class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                >
+                    <span x-show="!saving"><i class="fas fa-save mr-2"></i>Salvar</span>
+                    <span x-show="saving"><i class="fas fa-spinner fa-spin mr-2"></i>Salvando...</span>
+                </button>
+            </div>
         </div>
     </header>
 

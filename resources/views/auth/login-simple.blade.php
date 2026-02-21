@@ -12,7 +12,7 @@
         body { font-family: 'Inter', sans-serif; }
     </style>
 </head>
-<body class="bg-slate-900 min-h-screen" x-data="login()">
+<body class="bg-slate-900 min-h-screen" x-data="loginApp()" x-init="init()">
 
     <div class="min-h-screen flex items-center justify-center p-4">
         
@@ -38,7 +38,16 @@
                     <span x-text="error"></span>
                 </div>
 
-                <form @submit.prevent="login()" class="space-y-5">
+                <form action="/login" method="POST" class="space-y-5">
+                    @csrf
+                    
+                    <!-- Error -->
+                    @if($errors->any())
+                    <div class="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm flex items-center gap-2">
+                        <i class="fas fa-circle-exclamation"></i>
+                        <span>{{ $errors->first() }}</span>
+                    </div>
+                    @endif
                     
                     <!-- Email -->
                     <div>
@@ -47,7 +56,7 @@
                             <i class="fas fa-envelope absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"></i>
                             <input 
                                 type="email" 
-                                x-model="email"
+                                name="email" value="{{ old('email') }}"
                                 required
                                 class="w-full bg-slate-900/50 border border-slate-600 rounded-xl pl-11 pr-4 py-3 text-white placeholder-slate-500 focus:border-indigo-500 focus:ring-0 transition"
                                 placeholder="seu@email.com"
@@ -62,7 +71,7 @@
                             <i class="fas fa-lock absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"></i>
                             <input 
                                 type="password" 
-                                x-model="password"
+                                name="password"
                                 required
                                 class="w-full bg-slate-900/50 border border-slate-600 rounded-xl pl-11 pr-4 py-3 text-white placeholder-slate-500 focus:border-indigo-500 focus:ring-0 transition"
                                 placeholder="••••••••"
@@ -73,7 +82,7 @@
                     <!-- Remember & Forgot -->
                     <div class="flex items-center justify-between">
                         <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" x-model="remember" class="w-4 h-4 rounded bg-slate-900 border-slate-600 text-indigo-500 focus:ring-0">
+                            <input type="checkbox" name="remember" class="w-4 h-4 rounded bg-slate-900 border-slate-600 text-indigo-500 focus:ring-0">
                             <span class="text-xs text-slate-400">Lembrar</span>
                         </label>
                         <a href="/forgot-password" class="text-xs text-indigo-400 hover:text-indigo-300">Esqueceu a senha?</a>
@@ -85,6 +94,7 @@
                         :disabled="loading"
                         class="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/25 transition-all transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
+                        <i x-show="!loading" class="fas fa-sign-in-alt"></i>
                         <i x-show="loading" class="fas fa-spinner fa-spin"></i>
                         <span x-text="loading ? 'Entrando...' : 'Entrar'"></span>
                     </button>
@@ -99,7 +109,7 @@
     </div>
 
     <script>
-    function login() {
+    function loginApp() {
         return {
             email: '',
             password: '',
@@ -107,39 +117,13 @@
             loading: false,
             error: '',
             
-            async login() {
-                this.loading = true;
-                this.error = '';
-                
-                try {
-                    const response = await fetch('/login', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                        },
-                        body: JSON.stringify({
-                            email: this.email,
-                            password: this.password,
-                            remember: this.remember
-                        })
-                    });
-                    
-                    const data = await response.json();
-                    
-                    if (response.ok) {
-                        window.location.href = data.redirect || '/dashboard';
-                    } else {
-                        this.error = data.message || 'Credenciais inválidas';
-                    }
-                } catch (e) {
-                    this.error = 'Erro ao fazer login';
-                    console.error(e);
-                }
-                
-                this.loading = false;
+            init() {
+                // Handle form submit for loading state
+                this.$el.addEventListener('submit', () => {
+                    this.loading = true;
+                });
             }
-        }
+        };
     }
     </script>
 </body>

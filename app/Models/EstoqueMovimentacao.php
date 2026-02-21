@@ -2,10 +2,9 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToGroup;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-
-use App\Traits\BelongsToGroup;
 
 class EstoqueMovimentacao extends Model
 {
@@ -15,7 +14,7 @@ class EstoqueMovimentacao extends Model
 
     protected $fillable = [
         'product_sku_id',
-        'armazem_id',
+        'deposito_id',
         'user_id',
         'quantidade',
         'tipo',
@@ -30,9 +29,9 @@ class EstoqueMovimentacao extends Model
         return $this->belongsTo(ProductSku::class, 'product_sku_id');
     }
 
-    public function armazem(): BelongsTo
+    public function deposito(): BelongsTo
     {
-        return $this->belongsTo(Armazem::class);
+        return $this->belongsTo(Deposito::class);
     }
 
     public function user(): BelongsTo

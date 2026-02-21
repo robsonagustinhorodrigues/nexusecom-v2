@@ -161,6 +161,26 @@ class BlingController extends Controller
         return redirect()->route('integrations.index')->with('error', 'Erro ao atualizar nome.');
     }
 
+    public function testConnection()
+    {
+        $empresaId = Auth::user()->current_empresa_id;
+        $blingService = new BlingIntegrationService($empresaId);
+
+        if (! $blingService->isConnected()) {
+            return response()->json(['success' => false, 'message' => 'Bling não conectado.']);
+        }
+
+        try {
+            return response()->json([
+                'success' => true,
+                'message' => 'Conexão OK!',
+                'data' => ['status' => 'connected'],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => 'Erro: '.$e->getMessage()]);
+        }
+    }
+
     public function syncProdutos()
     {
         $empresaId = Auth::user()->current_empresa_id;

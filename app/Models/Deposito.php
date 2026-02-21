@@ -11,16 +11,21 @@ class Deposito extends Model
 
     protected $fillable = [
         'empresa_id',
+        'grupo_id',
         'nome',
         'descricao',
         'tipo', // loja, armazem, full, virtual
         'ativo',
+        'compartilhado',
+        'compartilhado_com',
     ];
 
     protected function casts(): array
     {
         return [
             'ativo' => 'boolean',
+            'compartilhado' => 'boolean',
+            'compartilhado_com' => 'array',
         ];
     }
 

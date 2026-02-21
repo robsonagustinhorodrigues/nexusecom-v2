@@ -7,11 +7,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class EstoqueSaldo extends Model
 {
-    protected $table = 'estoque_saldos';
+    protected $table = 'estoque_por_deposito';
 
     protected $fillable = [
         'product_sku_id',
-        'armazem_id',
+        'deposito_id',
         'saldo',
     ];
 
@@ -27,16 +27,16 @@ class EstoqueSaldo extends Model
         return $this->belongsTo(ProductSku::class, 'product_sku_id');
     }
 
-    public function armazem(): BelongsTo
+    public function deposito(): BelongsTo
     {
-        return $this->belongsTo(Armazem::class);
+        return $this->belongsTo(Deposito::class);
     }
 
-    public static function atualizarSaldo(int $skuId, int $armazemId, int $quantidade)
+    public static function atualizarSaldo(int $skuId, int $depositoId, int $quantidade)
     {
         $saldo = self::firstOrNew([
             'product_sku_id' => $skuId,
-            'armazem_id' => $armazemId,
+            'deposito_id' => $depositoId,
         ]);
 
         $saldo->saldo = ($saldo->saldo ?? 0) + $quantidade;

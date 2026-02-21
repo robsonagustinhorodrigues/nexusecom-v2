@@ -17,7 +17,32 @@
     <!-- Header -->
     <header class="fixed top-0 left-0 right-0 h-14 bg-slate-900/95 backdrop-blur border-b border-slate-800 z-50 flex items-center justify-between px-4">
         <div class="flex items-center gap-4">
+            <form method="POST" action="{{ route('logout') }}">
+                @csrf
+                <button type="submit" class="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-red-400" title="Sair">
+                    <i class="fas fa-sign-out-alt"></i>
+                </button>
+            </form>
             <a href="/products-list" class="p-2 hover:bg-slate-800 rounded-lg">
+            <!-- User Dropdown -->
+            <div class="relative" x-data="{ open: false }">
+                <button @click="open = !open" class="flex items-center gap-2 pl-3 border-l border-slate-700 pr-2 py-1 rounded-lg hover:bg-slate-800 transition">
+                    <div class="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-sm font-bold">R</div>
+                    <i class="fas fa-chevron-down text-xs text-slate-400"></i>
+                </button>
+                <div x-show="open" @click.away="open = false" x-transition class="absolute right-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-lg py-1 z-50">
+                    <div class="px-4 py-2 border-b border-slate-700">
+                        <p class="text-sm font-medium text-white">Robson</p>
+                        <p class="text-xs text-slate-400">robson@email.com</p>
+                    </div>
+                    <form method="POST" action="{{ route('logout') }}">
+                        @csrf
+                        <button type="submit" class="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-red-400 flex items-center gap-2">
+                            <i class="fas fa-sign-out-alt"></i> Sair
+                        </button>
+                    </form>
+                </div>
+            </div>
                 <i class="fas fa-arrow-left"></i>
             </a>
             <h1 class="font-bold text-lg">

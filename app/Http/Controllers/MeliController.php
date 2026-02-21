@@ -98,4 +98,38 @@ class MeliController extends Controller
 
         return redirect()->route('integrations.index')->with('error', 'Erro ao atualizar nome.');
     }
+
+    public function testConnection()
+    {
+        $empresaId = Auth::user()->current_empresa_id;
+        $meliService = new \App\Services\MeliIntegrationService($empresaId);
+
+        if (! $meliService->isConnected()) {
+            return response()->json(['success' => false, 'message' => 'Mercado Livre não conectado.']);
+        }
+
+        try {
+            return response()->json([
+                'success' => true, 
+                'message' => 'Conexão OK!',
+                'data' => ['status' => 'connected']
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => 'Erro: ' . $e->getMessage()]);
+        }
+    }
+}
+
+        try {
+            $user = $meliService->getUser();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Conexão OK!',
+                'data' => $user,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => 'Erro: '.$e->getMessage()]);
+        }
+    }
 }
