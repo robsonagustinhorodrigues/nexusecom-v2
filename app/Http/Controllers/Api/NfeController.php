@@ -296,4 +296,51 @@ class NfeController extends Controller
             return response()->json(['success' => false, 'message' => 'Erro: ' . $e->getMessage()]);
         }
     }
+
+    /**
+     * Importa NF-e do Bling por data
+     */
+    public function importBling(Request $request)
+    {
+        $request->validate([
+            'data_inicio' => 'required|date',
+            'data_fim' => 'required|date',
+        ]);
+
+        $empresaId = session('empresa_id', 6);
+        $empresa = \App\Models\Empresa::find($empresaId);
+
+        if (!$empresa) {
+            return response()->json(['success' => false, 'message' => 'Empresa não encontrada']);
+        }
+
+        // Verificar se tem integração com Bling
+        $blingConfig = $empresa->blingConfig()->first();
+        
+        if (!$blingConfig) {
+            return response()->json(['success' => false, 'message' => 'Integração do Bling não encontrada. Configure em Integrações.']);
+        }
+
+        try {
+            // Criar tarefa para rastrear
+            $tarefa = \App\Models\Tarefa::create([
+                'empresa_id' => $empresa->id,
+                'tipo' => 'import_nfe_bling',
+                'descricao' => "Importar NF-es do Bling de {$request->data_inicio} até {$request->data_fim}",
+                'status' => 'processando',
+                'progresso' => 0,
+            ]);
+
+            // TODO: Dispatch job para processar em background quando o serviço estiver implementado
+            // \App\Jobs\ImportarNFeBlingJob::dispatch($empresa, $request->data_inicio, $request->data_fim, $tarefa->id);
+
+            return response()->json([
+                'success' => true,
+                'job_id' => $tarefa->id,
+                'message' => 'Importação do Bling iniciada (serviço em desenvolvimento)',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => 'Erro: ' . $e->getMessage()]);
+        }
+    }
 }
