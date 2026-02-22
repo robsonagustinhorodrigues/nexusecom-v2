@@ -51,6 +51,11 @@ class MarketplaceAnuncio extends Model
         return $this->belongsTo(Integracao::class);
     }
 
+    public function produto(): BelongsTo
+    {
+        return $this->belongsTo(Product::class, 'produto_id');
+    }
+
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class, 'produto_id');

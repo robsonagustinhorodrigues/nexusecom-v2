@@ -32,6 +32,24 @@
                 <option value="0">❌ Inativos</option>
             </select>
 
+            <!-- Menu 3 pontos -->
+            <div class="relative" x-data="{ openMenu: false }">
+                <button @click="openMenu = !openMenu" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-bold text-sm flex items-center gap-2">
+                    <i class="fas fa-ellipsis-v"></i>
+                </button>
+                <div x-show="openMenu" @click.away="openMenu = false" class="absolute right-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden" style="display: none;">
+                    <button @click="exportProducts(); openMenu = false" class="w-full px-4 py-3 text-left text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2">
+                        <i class="fas fa-file-export text-emerald-400"></i>
+                        Exportar Planilha
+                    </button>
+                    <label class="w-full px-4 py-3 text-left text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2 cursor-pointer">
+                        <i class="fas fa-file-import text-amber-400"></i>
+                        Importar Planilha
+                        <input type="file" accept=".xlsx,.xls,.csv" @change="importProducts($event)" class="hidden">
+                    </label>
+                </div>
+            </div>
+
             <a href="/products/create" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-black italic uppercase text-xs transition-all flex items-center gap-2">
                 <i class="fas fa-plus"></i>
                 Novo Produto
@@ -138,10 +156,16 @@ function productsPage() {
         to: 0,
         
         async init() {
+            // Get empresa from localStorage
+            const savedEmpresa = localStorage.getItem('empresa_id');
+            this.empresaId = savedEmpresa ? parseInt(savedEmpresa) : 6;
+            
             await this.loadProducts();
             
-            // Ouvir mudança de empresa no layout
-            window.addEventListener('empresa-changed', () => {
+            // Listen for empresa changes from the layout
+            window.addEventListener('empresa-changed', (e) => {
+                this.empresaId = parseInt(e.detail);
+                localStorage.setItem('empresa_id', this.empresaId);
                 this.loadProducts();
             });
         },
@@ -196,6 +220,45 @@ function productsPage() {
             } catch (e) {
                 console.error('Erro ao excluir:', e);
             }
+        },
+        
+        exportProducts() {
+            const empresaId = localStorage.getItem('empresa_id') || '6';
+            window.location.href = `/api/products/export?empresa=${empresaId}`;
+        },
+        
+        async importProducts(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            const empresaId = localStorage.getItem('empresa_id') || '6';
+            
+            try {
+                const response = await fetch(`/api/products/import?empresa=${empresaId}`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert(data.message);
+                    this.loadProducts();
+                } else {
+                    alert(data.message || 'Erro na importação');
+                }
+            } catch (e) {
+                console.error('Erro ao importar:', e);
+                alert('Erro ao importar planilha');
+            }
+            
+            event.target.value = '';
         },
         
         formatMoney(value) {

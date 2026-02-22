@@ -85,23 +85,23 @@ class MeliController extends Controller
             'nome' => 'required|string|max:100',
         ]);
 
-        $empresaId = Auth::user()->current_empresa_id;
-        $meliService = new \App\Services\MeliIntegrationService($empresaId);
+        $empresaId = $request->get('empresa', session('empresa_id', 6));
+        $integracao = \App\Models\Integracao::where('empresa_id', $empresaId)
+            ->where('marketplace', 'mercadolivre')
+            ->first();
 
-        if (! $meliService->isConnected()) {
-            return redirect()->route('integrations.index')->with('error', 'Mercado Livre não conectado.');
+        if (! $integracao) {
+            return response()->json(['success' => false, 'message' => 'Integração não encontrada']);
         }
 
-        if ($meliService->updateNome($request->nome)) {
-            return redirect()->route('integrations.index')->with('message', 'Nome atualizado com sucesso!');
-        }
+        $integracao->update(['nome_conta' => $request->nome]);
 
-        return redirect()->route('integrations.index')->with('error', 'Erro ao atualizar nome.');
+        return response()->json(['success' => true, 'message' => 'Nome atualizado com sucesso!']);
     }
 
-    public function testConnection()
+    public function testConnection(\Illuminate\Http\Request $request)
     {
-        $empresaId = session('empresa_id', 6);
+        $empresaId = $request->get('empresa', session('empresa_id', 6));
         $meliService = new \App\Services\MeliIntegrationService($empresaId);
 
         if (! $meliService->isConnected()) {

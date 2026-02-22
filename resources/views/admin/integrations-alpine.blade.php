@@ -173,6 +173,7 @@
 <script>
 function integrationsPage() {
     return {
+        empresaId: 6,
         integrations: [],
         meliIntegration: null,
         blingIntegration: null,
@@ -183,26 +184,35 @@ function integrationsPage() {
         renameValue: '',
         
         init() {
-            this.loadIntegrations();
+            // Get empresa from localStorage
+            const savedEmpresa = localStorage.getItem('empresa_id');
+            this.empresaId = savedEmpresa ? parseInt(savedEmpresa) : 6;
+            
+            this.loadIntegrations(this.empresaId);
             
             // Listen for empresa changes from the layout
             window.addEventListener('empresa-changed', (e) => {
-                this.loadIntegrations(e.detail);
+                this.empresaId = parseInt(e.detail);
+                localStorage.setItem('empresa_id', this.empresaId);
+                this.loadIntegrations(this.empresaId);
             });
         },
         
         async loadIntegrations(empresaId = null) {
             if (!empresaId) {
-                empresaId = localStorage.getItem('empresa_id') || '6';
+                empresaId = this.empresaId || parseInt(localStorage.getItem('empresa_id')) || 6;
             }
             
             try {
-                const response = await fetch(`/admin/integrations?empresa=${empresaId}`);
-                this.integrations = await response.json();
+                const response = await fetch(`/api/admin/integrations?empresa=${empresaId}`);
+                const data = await response.json();
+                this.integrations = data;
                 
                 this.meliIntegration = this.integrations.find(i => i.marketplace === 'mercadolivre');
                 this.blingIntegration = this.integrations.find(i => i.marketplace === 'bling');
                 this.amazonIntegration = this.integrations.find(i => i.marketplace === 'amazon');
+                
+                console.log('Loaded integrations for empresa', empresaId, data);
             } catch (e) {
                 console.error('Error:', e);
             }
@@ -210,7 +220,7 @@ function integrationsPage() {
         
         async testConnection(type) {
             this.testing = true;
-            const empresaId = localStorage.getItem('empresa_id') || '6';
+            const empresaId = this.empresaId || localStorage.getItem('empresa_id') || 6;
             try {
                 const response = await fetch(`/integrations/${type}/test?empresa=${empresaId}`, { 
                     method: 'POST',
@@ -241,7 +251,8 @@ function integrationsPage() {
         
         async saveRename() {
             try {
-                const response = await fetch(`/integrations/${this.renameType}/update-nome`, {
+                const empresaId = this.empresaId || localStorage.getItem('empresa_id') || 6;
+                const response = await fetch(`/integrations/${this.renameType}/update-nome?empresa=${empresaId}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
                     body: JSON.stringify({ nome: this.renameValue })

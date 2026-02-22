@@ -184,6 +184,12 @@
             notifCount: 0,
             
             init() {
+                // Ensure localStorage has a value on first load
+                if (!localStorage.getItem('empresa_id')) {
+                    localStorage.setItem('empresa_id', '4');
+                }
+                this.empresaId = localStorage.getItem('empresa_id') || '4';
+                
                 window.addEventListener('resize', () => {
                     if(window.innerWidth >= 1024) this.sidebarOpen = true;
                 });

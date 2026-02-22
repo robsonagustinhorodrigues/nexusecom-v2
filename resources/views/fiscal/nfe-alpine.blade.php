@@ -33,7 +33,7 @@
             </select>
 
             <!-- Botão de Funções (Dropdown) -->
-            <div class="relative" x-data="{ importMenu: false }">
+            <div class="relative">
                 <button @click="importMenu = !importMenu" :disabled="importing" 
                         class="w-10 h-10 bg-slate-700 hover:bg-slate-600 border border-slate-600 text-white rounded-xl transition-all flex items-center justify-center shadow-lg"
                         title="Funções e Importações">
@@ -301,6 +301,7 @@ function fiscalPage() {
         dataInicio: '',
         dataFim: '',
         search: '',
+        importMenu: false,
         showImportMeli: false,
         showImportBling: false,
         showImportXml: false,
@@ -326,6 +327,7 @@ function fiscalPage() {
         total: 0,
         from: 0,
         to: 0,
+        empresaId: 6,
         
         get totalSelecionadas() {
             return this.nfe.filter(n => this.selected.includes(n.id)).reduce((sum, n) => sum + parseFloat(n.valor_total || 0), 0);
@@ -347,6 +349,10 @@ function fiscalPage() {
         },
         
         async init() {
+            // Get empresa from localStorage
+            const savedEmpresa = localStorage.getItem('empresa_id');
+            this.empresaId = savedEmpresa ? parseInt(savedEmpresa) : 6;
+            
             // Iniciar com data inicial -60 dias e data final hoje (dados históricos)
             const hoje = new Date();
             const sessentaDiasAtras = new Date();
@@ -357,14 +363,18 @@ function fiscalPage() {
             
             await this.loadNfe();
             
-            // Ouvir mudança de empresa no layout
-            window.addEventListener('empresa-changed', () => this.loadNfe());
+            // Listen for empresa changes from the layout
+            window.addEventListener('empresa-changed', (e) => {
+                this.empresaId = parseInt(e.detail);
+                localStorage.setItem('empresa_id', this.empresaId);
+                this.loadNfe();
+            });
         },
         
         async loadNfe() {
             this.loading = true;
             try {
-                const empresaId = localStorage.getItem('empresa_id') || '4';
+                const empresaId = this.empresaId || localStorage.getItem('empresa_id') || 6;
                 const params = new URLSearchParams({
                     empresa: empresaId,
                     tipo: this.view,
@@ -432,7 +442,7 @@ function fiscalPage() {
 
         async loadEmpresaStats() {
             try {
-                const empresaId = localStorage.getItem('empresa_id') || '4';
+                const empresaId = this.empresaId || localStorage.getItem('empresa_id') || 6;
                 const response = await fetch(`/api/admin/empresas/${empresaId}`);
                 if (response.ok) {
                     const empresa = await response.json();
@@ -448,7 +458,7 @@ function fiscalPage() {
         async importNfe() {
             this.importing = true;
             try {
-                const empresaId = localStorage.getItem('empresa_id') || '4';
+                const empresaId = this.empresaId || localStorage.getItem('empresa_id') || 6;
                 const response = await fetch(`/api/nfes/import?empresa=${empresaId}`, {
                     method: 'POST',
                     headers: { 
@@ -475,7 +485,7 @@ function fiscalPage() {
             // Existing SEFAZ import
             this.importing = true;
             try {
-                const empresaId = localStorage.getItem('empresa_id') || '4';
+                const empresaId = this.empresaId || localStorage.getItem('empresa_id') || 6;
                 const response = await fetch(`/api/nfes/import?empresa=${empresaId}`, {
                     method: 'POST',
                     headers: { 
@@ -552,7 +562,7 @@ function fiscalPage() {
             
             this.importing = true;
             try {
-                const empresaId = localStorage.getItem('empresa_id') || '4';
+                const empresaId = this.empresaId || localStorage.getItem('empresa_id') || 6;
                 const response = await fetch('/api/nfes/import-meli', {
                     method: 'POST',
                     headers: { 
@@ -658,7 +668,7 @@ function fiscalPage() {
             
             this.importing = true;
             try {
-                const empresaId = localStorage.getItem('empresa_id') || '4';
+                const empresaId = this.empresaId || localStorage.getItem('empresa_id') || 6;
                 const response = await fetch('/api/nfes/import-bling', {
                     method: 'POST',
                     headers: { 

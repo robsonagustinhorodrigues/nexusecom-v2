@@ -147,23 +147,23 @@ class BlingController extends Controller
             'nome' => 'required|string|max:100',
         ]);
 
-        $empresaId = Auth::user()->current_empresa_id;
-        $blingService = new BlingIntegrationService($empresaId);
+        $empresaId = $request->get('empresa', session('empresa_id', 6));
+        $integracao = \App\Models\Integracao::where('empresa_id', $empresaId)
+            ->where('marketplace', 'bling')
+            ->first();
 
-        if (! $blingService->isConnected()) {
-            return redirect()->route('integrations.index')->with('error', 'Bling não está conectado.');
+        if (! $integracao) {
+            return response()->json(['success' => false, 'message' => 'Integração não encontrada']);
         }
 
-        if ($blingService->updateNome($request->nome)) {
-            return redirect()->route('integrations.index')->with('message', 'Nome atualizado com sucesso!');
-        }
+        $integracao->update(['nome_conta' => $request->nome]);
 
-        return redirect()->route('integrations.index')->with('error', 'Erro ao atualizar nome.');
+        return response()->json(['success' => true, 'message' => 'Nome atualizado com sucesso!']);
     }
 
-    public function testConnection()
+    public function testConnection(\Illuminate\Http\Request $request)
     {
-        $empresaId = session('empresa_id', 6);
+        $empresaId = $request->get('empresa', session('empresa_id', 6));
         $blingService = new BlingIntegrationService($empresaId);
 
         if (! $blingService->isConnected()) {

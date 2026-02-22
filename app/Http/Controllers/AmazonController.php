@@ -105,26 +105,23 @@ class AmazonController extends Controller
             'nome' => 'required|string|max:100',
         ]);
 
-        $empresaId = Auth::user()->current_empresa_id;
-        $amazonService = new AmazonIntegrationService($empresaId);
+        $empresaId = $request->get('empresa', session('empresa_id', 6));
+        $integracao = \App\Models\Integracao::where('empresa_id', $empresaId)
+            ->where('marketplace', 'amazon')
+            ->first();
 
-        if (! $amazonService->isConnected()) {
-            return redirect()->route('integrations.index')->with('error', 'Amazon não conectado.');
+        if (! $integracao) {
+            return response()->json(['success' => false, 'message' => 'Integração não encontrada']);
         }
 
-        $integracao = $amazonService->getIntegracao();
-        if ($integracao) {
-            $integracao->update(['nome_conta' => $request->nome]);
+        $integracao->update(['nome_conta' => $request->nome]);
 
-            return redirect()->route('integrations.index')->with('message', 'Nome atualizado com sucesso!');
-        }
-
-        return redirect()->route('integrations.index')->with('error', 'Erro ao atualizar nome.');
+        return response()->json(['success' => true, 'message' => 'Nome atualizado com sucesso!']);
     }
 
-    public function testConnection()
+    public function testConnection(\Illuminate\Http\Request $request)
     {
-        $empresaId = session('empresa_id', 6);
+        $empresaId = $request->get('empresa', session('empresa_id', 6));
         $amazonService = new AmazonIntegrationService($empresaId);
 
         if (! $amazonService->isConnected()) {

@@ -116,11 +116,100 @@
                     </div>
                 </div>
                 <div class="p-4">
-                    <h3 class="font-semibold text-sm line-clamp-2 mb-2 text-white" x-text="anuncio.titulo"></h3>
+                    <h3 class="font-semibold text-sm line-clamp-2 mb-2 text-white flex items-center gap-2">
+                        <template x-if="editingTitulo !== anuncio.id">
+                            <span class="cursor-pointer hover:text-yellow-400" @click="startEditTitulo(anuncio)" title="Clique para editar">
+                                <span x-text="anuncio.titulo"></span>
+                                <i class="fas fa-edit text-xs text-slate-500 ml-1"></i>
+                            </span>
+                        </template>
+                        <template x-if="editingTitulo === anuncio.id">
+                            <div class="flex items-center gap-1 flex-1">
+                                <input type="text" x-model="editingTituloValue" class="bg-slate-700 text-white text-sm px-2 py-1 rounded flex-1" @keyup.enter="saveTitulo(anuncio)" @keyup.escape="cancelEditTitulo()">
+                                <button @click="saveTitulo(anuncio)" :disabled="savingField" class="p-1 bg-green-500 text-white rounded hover:bg-green-400">
+                                    <i class="fas fa-check text-xs"></i>
+                                </button>
+                                <button @click="cancelEditTitulo()" class="p-1 bg-slate-600 text-white rounded hover:bg-slate-500">
+                                    <i class="fas fa-times text-xs"></i>
+                                </button>
+                            </div>
+                        </template>
+                        <button @click="copyToClipboard(anuncio.titulo, 'Título copiado!')" class="text-slate-500 hover:text-yellow-400" title="Copiar título">
+                            <i class="fas fa-copy text-xs"></i>
+                        </button>
+                    </h3>
                     
+                    <!-- Linha 1: SKU | Estoque -->
+                    <div class="flex items-center justify-between mb-1 text-xs">
+                        <div class="flex items-center gap-1 text-slate-400">
+                            <template x-if="editingSku !== anuncio.id">
+                                <span class="cursor-pointer hover:text-yellow-400" @click="startEditSku(anuncio)" title="Clique para editar">
+                                    <span class="font-bold text-indigo-400">SKU:</span>
+                                    <span x-text="anuncio.sku || '-'"></span>
+                                    <i class="fas fa-edit text-[10px] text-slate-500 ml-1"></i>
+                                </span>
+                            </template>
+                            <template x-if="editingSku === anuncio.id">
+                                <div class="flex items-center gap-1">
+                                    <span class="font-bold text-indigo-400">SKU:</span>
+                                    <input type="text" x-model="editingSkuValue" class="bg-slate-700 text-white text-xs px-2 py-0.5 rounded w-20" @keyup.enter="saveSku(anuncio)" @keyup.escape="cancelEditSku()">
+                                    <button @click="saveSku(anuncio)" :disabled="savingField" class="p-0.5 bg-green-500 text-white rounded hover:bg-green-400">
+                                        <i class="fas fa-check text-[10px]"></i>
+                                    </button>
+                                    <button @click="cancelEditSku()" class="p-0.5 bg-slate-600 text-white rounded hover:bg-slate-500">
+                                        <i class="fas fa-times text-[10px]"></i>
+                                    </button>
+                                </div>
+                            </template>
+                            <button @click="copyToClipboard(anuncio.sku, 'SKU copiado!')" class="text-slate-500 hover:text-yellow-400 ml-1" title="Copiar SKU">
+                                <i class="fas fa-copy text-[10px]"></i>
+                            </button>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <span class="text-slate-500">Estoque:</span>
+                            <span :class="(anuncio.estoque || 0) > 0 ? 'text-green-400' : 'text-red-400'" x-text="anuncio.estoque || 0"></span>
+                        </div>
+                    </div>
+                    
+                    <!-- Linha 2: MLBU | Vendas -->
+                    <div class="flex items-center justify-between mb-1 text-xs">
+                        <div class="flex items-center gap-1">
+                            <span class="font-bold text-amber-400">MLBU:</span>
+                            <template x-if="anuncio.external_id">
+                                <span class="text-slate-300" x-text="anuncio.external_id"></span>
+                            </template>
+                            <template x-if="!anuncio.external_id">
+                                <span class="text-slate-600">-</span>
+                            </template>
+                            <template x-if="anuncio.external_id">
+                                <button @click="copyToClipboard(anuncio.external_id, 'MLB copiado!')" class="text-slate-500 hover:text-yellow-400" title="Copiar MLB">
+                                    <i class="fas fa-copy text-[10px]"></i>
+                                </button>
+                            </template>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <i class="fas fa-shopping-cart text-slate-500 text-[10px]"></i>
+                            <span class="text-slate-400">Vendas:</span>
+                            <span class="text-green-400 font-bold" x-text="anuncio.sold_quantity || 0"></span>
+                        </div>
+                    </div>
+                    
+                    <!-- Linha 3: ID Variação | Visitas -->
                     <div class="flex items-center justify-between mb-2 text-xs">
-                        <span class="text-slate-400" x-text="'SKU: ' + (anuncio.sku || '-')"></span>
-                        <span :class="(anuncio.estoque || 0) > 0 ? 'text-green-400' : 'text-red-400'" x-text="'Estoque: ' + (anuncio.estoque || 0)"></span>
+                        <div class="flex items-center gap-1">
+                            <span class="font-bold text-purple-400">ID Var:</span>
+                            <template x-if="anuncio.variation_id">
+                                <span class="text-slate-400" x-text="anuncio.variation_id"></span>
+                            </template>
+                            <template x-if="!anuncio.variation_id">
+                                <span class="text-slate-600">-</span>
+                            </template>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <i class="fas fa-eye text-slate-500 text-[10px]"></i>
+                            <span class="text-slate-400">Visitas:</span>
+                            <span class="text-blue-400" x-text="anuncio.visits || 0"></span>
+                        </div>
                     </div>
                     
                     <!-- Lucratividade -->
@@ -164,7 +253,7 @@
                                     </button>
                                 </div>
                             </template>
-                            <template x-if="!anuncio.product_linked && announcement.produto_id">
+                            <template x-if="!anuncio.product_linked && anuncio.produto_id">
                                 <button @click="openVincular(anuncio)" class="p-2 bg-amber-500/20 text-amber-400 rounded-lg hover:bg-amber-500/30 text-xs" title="Vincular a Produto">
                                     <i class="fas fa-link"></i>
                                 </button>
@@ -176,7 +265,7 @@
                             </template>
                         </div>
                         <div class="flex gap-1">
-                            <template x-if="anuncio.is_catalog && announcement.marketplace === 'mercadolivre'">
+                            <template x-if="anuncio.is_catalog && anuncio.marketplace === 'mercadolivre'">
                                 <a :href="getUrlConcorrentes(anuncio)" target="_blank" class="p-2 bg-slate-700 hover:bg-amber-500 hover:text-slate-900 rounded-lg text-xs" title="Ver Concorrentes">
                                     <i class="fas fa-chart-line"></i>
                                 </a>
@@ -226,13 +315,63 @@
                                 <div x-show="!anuncio.thumbnail" class="w-10 h-10 rounded bg-slate-700 flex items-center justify-center">
                                     <i class="fas fa-image text-slate-500 text-xs"></i>
                                 </div>
-                                <div>
-                                    <p class="text-sm font-medium text-white line-clamp-1" x-text="anuncio.titulo"></p>
-                                    <p class="text-xs text-slate-500" x-text="anuncio.marketplace"></p>
+                                <div class="min-w-0 flex-1">
+                                    <template x-if="editingTitulo !== anuncio.id">
+                                        <p class="text-sm font-medium text-white line-clamp-1 flex items-center gap-1 cursor-pointer hover:text-yellow-400" @click="startEditTitulo(anuncio)" title="Clique para editar">
+                                            <span x-text="anuncio.titulo"></span>
+                                            <i class="fas fa-edit text-xs text-slate-500"></i>
+                                        </p>
+                                    </template>
+                                    <template x-if="editingTitulo === anuncio.id">
+                                        <div class="flex items-center gap-1">
+                                            <input type="text" x-model="editingTituloValue" class="bg-slate-700 text-white text-sm px-2 py-1 rounded flex-1 min-w-0" @keyup.enter="saveTitulo(anuncio)" @keyup.escape="cancelEditTitulo()">
+                                            <button @click="saveTitulo(anuncio)" :disabled="savingField" class="p-1 bg-green-500 text-white rounded hover:bg-green-400 flex-shrink-0">
+                                                <i class="fas fa-check text-xs"></i>
+                                            </button>
+                                            <button @click="cancelEditTitulo()" class="p-1 bg-slate-600 text-white rounded hover:bg-slate-500 flex-shrink-0">
+                                                <i class="fas fa-times text-xs"></i>
+                                            </button>
+                                        </div>
+                                    </template>
+                                    <p class="text-xs text-slate-500 flex items-center gap-1">
+                                        <span x-text="anuncio.marketplace"></span>
+                                        <template x-if="anuncio.external_id">
+                                            <span class="text-slate-600">-</span>
+                                        </template>
+                                        <template x-if="anuncio.external_id">
+                                            <button @click="copyToClipboard(anuncio.external_id, 'MLB copiado!')" class="text-slate-500 hover:text-yellow-400" title="Copiar MLB">
+                                                <span x-text="anuncio.external_id"></span>
+                                                <i class="fas fa-copy text-[10px]"></i>
+                                            </button>
+                                        </template>
+                                    </p>
                                 </div>
                             </div>
                         </td>
-                        <td class="px-4 py-3 text-sm text-slate-400" x-text="anuncio.sku || '-'"></td>
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-1">
+                                <template x-if="editingSku !== anuncio.id">
+                                    <span class="text-sm text-slate-400 cursor-pointer hover:text-yellow-400 flex items-center gap-1" @click="startEditSku(anuncio)" title="Clique para editar">
+                                        <span x-text="anuncio.sku || '-'"></span>
+                                        <i class="fas fa-edit text-xs text-slate-500"></i>
+                                    </span>
+                                </template>
+                                <template x-if="editingSku === anuncio.id">
+                                    <div class="flex items-center gap-1">
+                                        <input type="text" x-model="editingSkuValue" class="bg-slate-700 text-white text-sm px-2 py-1 rounded w-24" @keyup.enter="saveSku(anuncio)" @keyup.escape="cancelEditSku()">
+                                        <button @click="saveSku(anuncio)" :disabled="savingField" class="p-1 bg-green-500 text-white rounded hover:bg-green-400">
+                                            <i class="fas fa-check text-xs"></i>
+                                        </button>
+                                        <button @click="cancelEditSku()" class="p-1 bg-slate-600 text-white rounded hover:bg-slate-500">
+                                            <i class="fas fa-times text-xs"></i>
+                                        </button>
+                                    </div>
+                                </template>
+                                <button @click="copyToClipboard(anuncio.sku, 'SKU copiado!')" class="text-slate-500 hover:text-yellow-400" title="Copiar SKU" x-show="anuncio.sku">
+                                    <i class="fas fa-copy text-xs"></i>
+                                </button>
+                            </div>
+                        </td>
                         <td class="px-4 py-3 text-right font-bold text-white" x-text="formatMoney(anuncio.preco)"></td>
                         <td class="px-4 py-3 text-right text-red-400" x-text="formatMoney(anuncio.custo || 0)"></td>
                         <td class="px-4 py-3 text-right text-amber-400" x-text="formatMoney(anuncio.taxas || 0)"></td>
@@ -467,16 +606,39 @@ function anunciosPage() {
         },
         savingRepricer: false,
         
+        editingSku: null,
+        editingSkuValue: '',
+        editingTitulo: null,
+        editingTituloValue: '',
+        savingField: false,
+        
         init() {
+            // Get empresa from localStorage or default
+            const savedEmpresa = localStorage.getItem('empresa_id');
+            this.empresaId = savedEmpresa ? parseInt(savedEmpresa) : 6;
+            
+            console.log('Initial empresaId:', this.empresaId);
+            
+            // Watch for local changes
             this.$watch('empresaId', () => {
                 localStorage.setItem('empresa_id', this.empresaId);
                 this.loadAnuncios();
             });
+            
+            // Listen for empresa changes from the layout
+            window.addEventListener('empresa-changed', (e) => {
+                console.log('Empresa changed event:', e.detail);
+                this.empresaId = parseInt(e.detail);
+                localStorage.setItem('empresa_id', this.empresaId);
+                this.loadAnuncios();
+            });
+            
             this.loadAnuncios();
         },
         
         async loadAnuncios() {
             this.loading = true;
+            console.log('Loading anuncios for empresa:', this.empresaId);
             try {
                 const params = new URLSearchParams({
                     empresa: this.empresaId,
@@ -488,7 +650,9 @@ function anunciosPage() {
                 });
                 
                 const response = await fetch(`/api/anuncios?${params}`);
+                console.log('Response status:', response.status);
                 const data = await response.json();
+                console.log('Data received:', data);
                 this.anuncios = data.data || data;
             } catch (e) {
                 console.error('Error:', e);
@@ -499,7 +663,10 @@ function anunciosPage() {
         async syncAnuncios() {
             this.syncing = true;
             try {
-                await fetch(`/api/anuncios/sync?empresa=${this.empresaId}`, { method: 'POST' });
+                await fetch(`/api/anuncios/sync?empresa=${this.empresaId}`, { 
+                    method: 'POST',
+                    headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+                });
                 await this.loadAnuncios();
             } catch (e) {
                 console.error('Sync error:', e);
@@ -537,7 +704,10 @@ function anunciosPage() {
             try {
                 const response = await fetch(`/api/anuncios/${this.anuncioSelecionado.id}/vincular`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
                     body: JSON.stringify({ produto_id: produtoId })
                 });
                 const data = await response.json();
@@ -560,7 +730,10 @@ function anunciosPage() {
             try {
                 const response = await fetch(`/api/anuncios/${anuncio.id}/importar`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    }
                 });
                 const data = await response.json();
                 if (data.success) {
@@ -596,6 +769,111 @@ function anunciosPage() {
             return null;
         },
         
+        // Copy methods
+        copyToClipboard(text, message = 'Copiado!') {
+            navigator.clipboard.writeText(text).then(() => {
+                alert(message);
+            }).catch(() => {
+                alert('Erro ao copiar');
+            });
+        },
+        
+        // Edit SKU
+        startEditSku(anuncio) {
+            this.editingSku = anuncio.id;
+            this.editingSkuValue = anuncio.sku || '';
+        },
+        
+        async saveSku(anuncio) {
+            if (!this.editingSkuValue.trim()) {
+                alert('SKU não pode estar vazio');
+                return;
+            }
+            
+            this.savingField = true;
+            try {
+                const response = await fetch(`/api/anuncios/${anuncio.id}`, {
+                    method: 'PUT',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({ sku: this.editingSkuValue })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    anuncio.sku = this.editingSkuValue;
+                    this.editingSku = null;
+                    if (data.meli_synced) {
+                        alert('SKU atualizado no Mercado Livre!');
+                    } else if (data.meli_error) {
+                        alert('SKU atualizado localmente, mas erro ao sync ML: ' + data.meli_error);
+                    } else {
+                        alert('SKU atualizado!');
+                    }
+                } else {
+                    alert(data.message || 'Erro ao atualizar');
+                }
+            } catch (e) {
+                console.error('Error:', e);
+                alert('Erro ao atualizar SKU');
+            }
+            this.savingField = false;
+        },
+        
+        cancelEditSku() {
+            this.editingSku = null;
+            this.editingSkuValue = '';
+        },
+        
+        // Edit Título
+        startEditTitulo(anuncio) {
+            this.editingTitulo = anuncio.id;
+            this.editingTituloValue = anuncio.titulo || '';
+        },
+        
+        async saveTitulo(anuncio) {
+            if (!this.editingTituloValue.trim()) {
+                alert('Título não pode estar vazio');
+                return;
+            }
+            
+            this.savingField = true;
+            try {
+                const response = await fetch(`/api/anuncios/${anuncio.id}`, {
+                    method: 'PUT',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({ titulo: this.editingTituloValue })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    anuncio.titulo = this.editingTituloValue;
+                    this.editingTitulo = null;
+                    if (data.meli_synced) {
+                        alert('Título atualizado no Mercado Livre!');
+                    } else if (data.meli_error) {
+                        alert('Título atualizado localmente, mas erro ao sync ML: ' + data.meli_error);
+                    } else {
+                        alert('Título atualizado!');
+                    }
+                } else {
+                    alert(data.message || 'Erro ao atualizar');
+                }
+            } catch (e) {
+                console.error('Error:', e);
+                alert('Erro ao atualizar título');
+            }
+            this.savingField = false;
+        },
+        
+        cancelEditTitulo() {
+            this.editingTitulo = null;
+            this.editingTituloValue = '';
+        },
+        
         // Repricer methods
         async openRepricer(anuncio) {
             this.repricerAnuncioId = anuncio.id;
@@ -629,7 +907,10 @@ function anunciosPage() {
             try {
                 const response = await fetch(`/api/anuncios/${this.repricerAnuncioId}/repricer`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
                     body: JSON.stringify(this.repricerConfig)
                 });
                 const data = await response.json();

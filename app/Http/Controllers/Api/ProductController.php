@@ -192,9 +192,9 @@ class ProductController extends Controller
         if ($validated['tipo'] === 'variacao' && $request->variations) {
             // Delete existing variations
             $product->variations()->delete();
-            
+
             foreach ($request->variations as $var) {
-                if (!empty($var['sku'])) {
+                if (! empty($var['sku'])) {
                     $product->variations()->create([
                         'sku' => $var['sku'],
                         'label' => $var['label'] ?? 'Variação',
@@ -229,9 +229,9 @@ class ProductController extends Controller
         if ($request->has('skus') && $request->skus) {
             // Delete existing skus
             $product->skus()->delete();
-            
+
             foreach ($request->skus as $sku) {
-                if (!empty($sku['sku'])) {
+                if (! empty($sku['sku'])) {
                     $product->skus()->create([
                         'sku' => $sku['sku'],
                         'label' => $sku['label'] ?? null,
@@ -306,5 +306,41 @@ class ProductController extends Controller
         return response()->json(
             Tag::orderBy('nome')->get()
         );
+    }
+
+    public function export(Request $request)
+    {
+        $empresaId = $request->get('empresa', session('empresa_id', 6));
+
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\ProductsExport($empresaId),
+            'produtos_'.date('d_m_Y_H_i').'.xlsx'
+        );
+    }
+
+    public function import(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|file|mimes:xlsx,xls,csv',
+        ]);
+
+        $empresaId = $request->get('empresa', session('empresa_id', 6));
+
+        try {
+            \Maatwebsite\Excel\Facades\Excel::import(
+                new \App\Imports\ProductsImport($empresaId),
+                $request->file('file')
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Importação concluída com sucesso!',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro na importação: '.$e->getMessage(),
+            ], 422);
+        }
     }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\MarketplaceAnuncio;
+use App\Services\MeliIntegrationService;
 use Illuminate\Http\Request;
 
 class AnuncioController extends Controller
@@ -13,7 +14,7 @@ class AnuncioController extends Controller
         $empresaId = $request->get('empresa', $request->get('empresa_id', session('empresa_id', 6)));
 
         $query = MarketplaceAnuncio::where('empresa_id', $empresaId)
-            ->with(['produto', 'productSku', 'productSku.product', 'repricerConfig']);
+            ->with(['product', 'productSku', 'productSku.product', 'repricerConfig']);
 
         if ($request->marketplace) {
             $query->where('marketplace', $request->marketplace);
@@ -77,6 +78,7 @@ class AnuncioController extends Controller
         return [
             'id' => $ad->id,
             'external_id' => $ad->external_id,
+            'variation_id' => $jsonData['variation_id'] ?? null,
             'titulo' => $ad->titulo,
             'sku' => $ad->sku,
             'preco' => floatval($ad->preco ?? 0),
@@ -90,6 +92,7 @@ class AnuncioController extends Controller
             'thumbnail' => $ad->thumbnail ?? ($jsonData['thumbnail'] ?? null),
             'url' => $ad->url ?? '#',
             'sold_quantity' => intval($ad->sold_quantity ?? 0),
+            'visits' => intval($jsonData['visits'] ?? 0),
             'listing_type' => $jsonData['listing_type_id'] ?? 'gold_special',
             'product_linked' => ! empty($ad->product_sku_id),
             'produto_id' => $ad->produto_id,
@@ -117,9 +120,9 @@ class AnuncioController extends Controller
         $custoAdicional = 0;
 
         // Tenta buscar do produto vinculado diretamente
-        if ($anuncio->produto) {
-            $custo = floatval($anuncio->produto->preco_custo ?? 0);
-            $custoAdicional = floatval($anuncio->produto->custo_adicional ?? 0);
+        if ($anuncio->product) {
+            $custo = floatval($anuncio->product->preco_custo ?? 0);
+            $custoAdicional = floatval($anuncio->product->custo_adicional ?? 0);
         }
         // Se não tiver produto_id, tenta pelo sku
         elseif ($anuncio->productSku) {
@@ -206,9 +209,44 @@ class AnuncioController extends Controller
     public function update(Request $request, $id)
     {
         $ad = MarketplaceAnuncio::findOrFail($id);
-        $ad->update($request->only(['status', 'preco', 'estoque', 'titulo']));
 
-        return response()->json(['success' => true, 'message' => 'Anúncio atualizado']);
+        $data = $request->only(['status', 'preco', 'estoque', 'titulo', 'sku']);
+
+        $meliSynced = false;
+        $meliError = null;
+
+        if (($request->filled('titulo') || $request->filled('sku')) && $ad->marketplace === 'mercadolivre') {
+            try {
+                $service = new MeliIntegrationService($ad->empresa_id);
+                $meliData = [];
+
+                if ($request->filled('titulo')) {
+                    $meliData['title'] = $request->titulo;
+                }
+                if ($request->filled('sku')) {
+                    $meliData['sku'] = $request->sku;
+                }
+
+                $meliResult = $service->atualizarAnuncio($ad->external_id, $meliData);
+                $meliSynced = $meliResult['success'] ?? false;
+                $meliError = $meliResult['error'] ?? null;
+            } catch (\Exception $e) {
+                $meliError = $e->getMessage();
+            }
+        }
+
+        if ($request->filled('sku')) {
+            $data['sku'] = $request->sku;
+        }
+
+        $ad->update($data);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Anúncio atualizado',
+            'meli_synced' => $meliSynced,
+            'meli_error' => $meliError,
+        ]);
     }
 
     public function sync(Request $request)

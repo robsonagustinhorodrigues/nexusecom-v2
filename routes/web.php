@@ -115,7 +115,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/admin/configuracoes', function () {
         return view('admin.configuracoes-alpine');
     })->name('admin.configuracoes');
-    
+
     // Novas rotas Alpine
     Route::get('/admin/avisos', function () {
         return view('admin.avisos-alpine');
@@ -131,21 +131,25 @@ Route::middleware(['auth'])->group(function () {
             ->orderBy('created_at', 'desc')
             ->limit(50)
             ->get();
+
         return response()->json(['notificacoes' => $notificacoes]);
     });
 
     Route::post('/api/admin/notificacoes/marcar-lida', function () {
         \App\Models\Notificacao::where('user_id', auth()->id())->update(['read' => true]);
+
         return response()->json(['success' => true]);
     });
 
     Route::delete('/api/admin/notificacoes/{id}', function ($id) {
         \App\Models\Notificacao::findOrFail($id)->delete();
+
         return response()->json(['success' => true]);
     });
 
     Route::delete('/api/admin/notificacoes/limpar', function () {
         \App\Models\Notificacao::where('user_id', auth()->id())->delete();
+
         return response()->json(['success' => true]);
     });
 
@@ -167,9 +171,10 @@ Route::middleware(['auth'])->group(function () {
 
     Route::delete('/api/admin/tarefas/limpar', function () {
         \App\Models\Tarefa::where('status', 'concluido')->delete();
+
         return response()->json(['success' => true]);
     });
-    
+
     Route::get('/roadmap', function () {
         $phases = (new \App\Livewire\Admin\Roadmap)->phases;
 
@@ -246,6 +251,8 @@ Route::prefix('api')->middleware('auth')->group(function () {
     Route::get('/products', [App\Http\Controllers\Api\ProductController::class, 'index']);
     Route::post('/products', [App\Http\Controllers\Api\ProductController::class, 'store']);
     Route::get('/products/search', [App\Http\Controllers\Api\ProductController::class, 'search']);
+    Route::get('/products/export', [App\Http\Controllers\Api\ProductController::class, 'export']);
+    Route::post('/products/import', [App\Http\Controllers\Api\ProductController::class, 'import']);
     Route::get('/products/{id}', [App\Http\Controllers\Api\ProductController::class, 'show']);
     Route::put('/products/{id}', [App\Http\Controllers\Api\ProductController::class, 'update']);
     Route::delete('/products/{id}', [App\Http\Controllers\Api\ProductController::class, 'destroy']);

@@ -711,6 +711,8 @@ class MeliIntegrationService
      */
     public function atualizarAnuncio(string $itemId, array $dados): array
     {
+        $this->refreshToken();
+
         $token = $this->getAccessToken();
 
         if (! $token) {
@@ -719,17 +721,22 @@ class MeliIntegrationService
 
         try {
             $payload = [];
-            
+
             if (isset($dados['title'])) {
                 $payload['title'] = $dados['title'];
             }
             if (isset($dados['price'])) {
                 $payload['price'] = floatval($dados['price']);
             }
+            if (isset($dados['sku'])) {
+                $payload['seller_custom_field'] = $dados['sku'];
+            }
 
             if (empty($payload)) {
                 return ['success' => false, 'error' => 'Nenhum dado para atualizar'];
             }
+
+            Log::info("Meli: Tentando atualizar item {$itemId} com payload: ".json_encode($payload));
 
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer '.$token,
@@ -759,7 +766,7 @@ class MeliIntegrationService
     public function getShippingCosts(): ?array
     {
         $token = $this->getAccessToken();
-        if (!$token) {
+        if (! $token) {
             return null;
         }
 
@@ -775,6 +782,7 @@ class MeliIntegrationService
             return null;
         } catch (\Exception $e) {
             Log::error('Meli getShippingCosts exception: '.$e->getMessage());
+
             return null;
         }
     }
@@ -807,7 +815,7 @@ class MeliIntegrationService
         // Obter tabela de preços do seller
         $pricing = $this->getShippingCosts();
 
-        if (!$pricing) {
+        if (! $pricing) {
             // Retornar estimation básica se não conseguir a tabela
             return [
                 'weight' => $weightInGrams,
@@ -844,15 +852,16 @@ class MeliIntegrationService
     public function getListingPrices(array $params): ?array
     {
         $token = $this->getAccessToken();
-        if (!$token) {
+        if (! $token) {
             return null;
         }
 
         // Parâmetros obrigatórios
         $required = ['price', 'listing_type_id'];
         foreach ($required as $param) {
-            if (!isset($params[$param])) {
+            if (! isset($params[$param])) {
                 Log::warning("Meli getListingPrices: parâmetro obrigatório ausente: {$param}");
+
                 return null;
             }
         }
@@ -868,20 +877,21 @@ class MeliIntegrationService
 
             if ($response->successful()) {
                 $data = $response->json();
-                
+
                 // Pode retornar array de arrays, pega o primeiro
                 if (is_array($data) && isset($data[0])) {
                     return $data[0];
                 }
-                
-                
+
                 return $data;
             }
 
-            Log::warning("Meli getListingPrices erro: ".$response->status());
+            Log::warning('Meli getListingPrices erro: '.$response->status());
+
             return null;
         } catch (\Exception $e) {
             Log::error('Meli getListingPrices exception: '.$e->getMessage());
+
             return null;
         }
     }
@@ -892,7 +902,9 @@ class MeliIntegrationService
     public function getItemDescription(string $itemId): ?string
     {
         $token = $this->getAccessToken();
-        if (!$token) return null;
+        if (! $token) {
+            return null;
+        }
 
         try {
             $response = Http::withHeaders([
@@ -902,6 +914,7 @@ class MeliIntegrationService
             if ($response->successful()) {
                 return $response->json()['plain_text'] ?? null;
             }
+
             return null;
         } catch (\Exception $e) {
             return null;
@@ -931,7 +944,7 @@ class MeliIntegrationService
 
         $pricing = $this->getListingPrices($params);
 
-        if (!$pricing) {
+        if (! $pricing) {
             // Fallback para cálculo local
             return $this->calculateLocalFee($price, $listingType);
         }
@@ -961,7 +974,7 @@ class MeliIntegrationService
         ];
 
         $fee = $fees[$listingType] ?? $fees['gold_special'];
-        
+
         $percentageFee = $price * ($fee['percentage'] / 100);
         $totalFee = $percentageFee + $fee['fixed'];
 
@@ -985,8 +998,9 @@ class MeliIntegrationService
     {
         try {
             // Só faz baixa para pedidos pagos ou em aberto
-            if (!in_array($pedido->status, ['em_aberto', 'paid', 'pendente', 'pending'])) {
+            if (! in_array($pedido->status, ['em_aberto', 'paid', 'pendente', 'pending'])) {
                 Log::info("Estoque: Pedido {$pedido->pedido_id} não está pago, não fará baixa. Status: {$pedido->status}");
+
                 return;
             }
 
@@ -997,8 +1011,9 @@ class MeliIntegrationService
             // Determinar depósito baseado na logística
             $depositoId = $this->getDepositoPorLogistica($logisticType, $pedido->empresa_id);
 
-            if (!$depositoId) {
+            if (! $depositoId) {
                 Log::warning("Estoque: Depósito não encontrado para logística: {$logisticType}");
+
                 return;
             }
 
@@ -1006,6 +1021,7 @@ class MeliIntegrationService
             $orderItems = $orderData['order_items'] ?? [];
             if (empty($orderItems)) {
                 Log::warning("Estoque: Pedido {$pedido->pedido_id} sem itens");
+
                 return;
             }
 
@@ -1015,8 +1031,8 @@ class MeliIntegrationService
             foreach ($orderItems as $item) {
                 // Buscar SKU pelo external_id do item
                 $itemId = $item['item']['id'] ?? null;
-                
-                if (!$itemId) {
+
+                if (! $itemId) {
                     continue;
                 }
 
@@ -1025,8 +1041,9 @@ class MeliIntegrationService
                     ->where('empresa_id', $pedido->empresa_id)
                     ->first();
 
-                if (!$anuncio) {
+                if (! $anuncio) {
                     Log::warning("Estoque: Anúncio não encontrado para item {$itemId}");
+
                     continue;
                 }
 
@@ -1037,8 +1054,9 @@ class MeliIntegrationService
                     $skuId = $sku?->id;
                 }
 
-                if (!$skuId) {
+                if (! $skuId) {
                     Log::warning("Estoque: SKU não encontrado para produto {$anuncio->produto_id}");
+
                     continue;
                 }
 
@@ -1061,7 +1079,7 @@ class MeliIntegrationService
             Log::info("Estoque: Pedido {$pedido->pedido_id} - {$baixas} baixas realizadas");
 
         } catch (\Exception $e) {
-            Log::error("Estoque: Erro ao fazer baixa automática: " . $e->getMessage());
+            Log::error('Estoque: Erro ao fazer baixa automática: '.$e->getMessage());
         }
     }
 
@@ -1070,7 +1088,7 @@ class MeliIntegrationService
      */
     protected function getDepositoPorLogistica(?string $logisticType, int $empresaId): ?int
     {
-        $tipoDeposito = match($logisticType) {
+        $tipoDeposito = match ($logisticType) {
             'fulfillment' => 'full',
             'self_service', 'cross_docking', 'drop_off', 'xd_drop_off', 'turbo' => 'loja',
             default => 'loja',
@@ -1090,7 +1108,9 @@ class MeliIntegrationService
     public function getItem(string $itemId): ?array
     {
         $token = $this->getAccessToken();
-        if (!$token) return null;
+        if (! $token) {
+            return null;
+        }
 
         try {
             $response = Http::withHeaders([
@@ -1103,7 +1123,8 @@ class MeliIntegrationService
 
             return null;
         } catch (\Exception $e) {
-            Log::error('Meli getItem exception: ' . $e->getMessage());
+            Log::error('Meli getItem exception: '.$e->getMessage());
+
             return null;
         }
     }
@@ -1113,18 +1134,18 @@ class MeliIntegrationService
         $token = $this->getAccessToken();
         $integracao = $this->getIntegracao();
 
-        if (!$token || !$integracao) {
+        if (! $token || ! $integracao) {
             return ['cost' => 0, 'source' => 'no_integration', 'is_free_shipping' => false];
         }
 
         try {
             $userId = $integracao->external_user_id;
-            
+
             // 1. Tentar obter o custo do frete grátis via API de shipping_options
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer '.$token,
             ])->get("https://api.mercadolibre.com/users/{$userId}/shipping_options/free", [
-                'item_id' => $itemId
+                'item_id' => $itemId,
             ]);
 
             $cost = 0;
@@ -1145,18 +1166,18 @@ class MeliIntegrationService
             if ($itemResponse->successful()) {
                 $itemData = $itemResponse->json();
                 $isFreeShipping = $itemData['shipping']['free_shipping'] ?? false;
-                
-                if (!$isFreeShipping) {
+
+                if (! $isFreeShipping) {
                     $price = $itemData['price'] ?? 0;
                     $listingTypeId = $itemData['listing_type_id'] ?? 'gold_pro';
-                    
+
                     $pricingResponse = Http::withHeaders([
                         'Authorization' => 'Bearer '.$token,
-                    ])->get("https://api.mercadolibre.com/sites/MLB/listing_prices", [
+                    ])->get('https://api.mercadolibre.com/sites/MLB/listing_prices', [
                         'price' => $price,
-                        'listing_type_id' => $listingTypeId
+                        'listing_type_id' => $listingTypeId,
                     ]);
-                    
+
                     if ($pricingResponse->successful()) {
                         $pricingData = $pricingResponse->json();
                         // Geralmente retorna array
@@ -1172,11 +1193,12 @@ class MeliIntegrationService
             return [
                 'cost' => floatval($cost),
                 'is_free_shipping' => $isFreeShipping,
-                'source' => $isFreeShipping ? 'shipping_options' : 'fixed_fee'
+                'source' => $isFreeShipping ? 'shipping_options' : 'fixed_fee',
             ];
 
         } catch (\Exception $e) {
-            Log::error('Meli obterCustoFreteMercadoLivre exception: ' . $e->getMessage());
+            Log::error('Meli obterCustoFreteMercadoLivre exception: '.$e->getMessage());
+
             return ['cost' => 0, 'source' => 'error', 'is_free_shipping' => false];
         }
     }

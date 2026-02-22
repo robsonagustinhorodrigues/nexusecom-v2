@@ -176,10 +176,23 @@ function estoque() {
         movimentacao: { deposito_id: '', tipo: 'entrada', quantidade: 1, observacao: '' },
         
         init() {
+            // Get empresa from localStorage
+            const savedEmpresa = localStorage.getItem('empresa_id');
+            this.empresaId = savedEmpresa ? parseInt(savedEmpresa) : 6;
+            
+            // Watch for local changes
             this.$watch('empresaId', () => {
                 localStorage.setItem('empresa_id', this.empresaId);
                 this.loadEstoque();
             });
+            
+            // Listen for empresa changes from the layout
+            window.addEventListener('empresa-changed', (e) => {
+                this.empresaId = parseInt(e.detail);
+                localStorage.setItem('empresa_id', this.empresaId);
+                this.loadEstoque();
+            });
+            
             this.loadDepositos();
             this.loadEstoque();
         },

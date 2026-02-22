@@ -8,6 +8,7 @@ use Picqer\Barcode\BarcodeGeneratorPNG;
 class DanfeService
 {
     private array $config = [];
+
     private array $nfeData = [];
 
     public function gerarDanfeA4(string $xml, array $empresa): string
@@ -18,17 +19,17 @@ class DanfeService
             $danfe->exibirPIS = false;
             $danfe->exibirCOFINS = false;
             $danfe->exibirIcmsST = false;
-            
-            if (!empty($empresa['logo_path'])) {
-                $logoPath = storage_path('app/public/' . $empresa['logo_path']);
+
+            if (! empty($empresa['logo_path'])) {
+                $logoPath = storage_path('app/public/'.$empresa['logo_path']);
                 if (file_exists($logoPath)) {
                     $danfe->logoParameters($logoPath, 'C', false);
                 }
             }
-            
+
             $danfe->setDefaultFont('times');
             $pdf = $danfe->render();
-            
+
             return response($pdf, 200, [
                 'Content-Type' => 'application/pdf',
                 'Content-Disposition' => 'inline; filename="DANFE_A4.pdf"',
@@ -71,9 +72,10 @@ class DanfeService
     private function generateBarcode(string $content): string
     {
         try {
-            $generator = new BarcodeGeneratorPNG();
+            $generator = new BarcodeGeneratorPNG;
             $barcode = base64_encode($generator->getBarcode($content, $generator::TYPE_CODE_128, 2, 50));
-            return 'data:image/png;base64,' . $barcode;
+
+            return 'data:image/png;base64,'.$barcode;
         } catch (\Exception $e) {
             return '';
         }
@@ -83,7 +85,7 @@ class DanfeService
     {
         $data = $this->nfeData;
         $cfg = $this->config;
-        
+
         $logoUrl = null;
         if ($cfg['show_logo'] && $cfg['logo_path']) {
             $logoUrl = Storage::url($cfg['logo_path']);
@@ -91,13 +93,13 @@ class DanfeService
 
         $chave = $data['chave'] ?? '';
         $barcodeData = $this->generateBarcode($chave);
-        
+
         $qtdItens = $data['quantidade_itens'] ?? 1;
         $qtdDestaqueClass = $qtdItens > 1 ? 'qtd-multiplos' : 'qtd-unico';
         $qtdDestaqueTexto = $qtdItens > 1 ? 'ITENS PARA SEPARAR' : 'ÚNICO ITEM';
         $qtdDestaqueNum = $qtdItens;
         $qtdDestaqueLabel = $qtdItens > 1 ? 'ITENS' : 'ITEM';
-        
+
         $html = <<<HTML
 <!DOCTYPE html>
 <html>
@@ -142,8 +144,18 @@ class DanfeService
         
         table.itens { width: 100%; border-collapse: collapse; font-size: 8px; }
         table.itens th { background: #333; color: #fff; padding: 2mm; text-align: left; border: 1px solid #333; }
-        table.itens td { padding: 2mm; border: 1px solid #333; }
+        table.itens td { padding: 2mm; border-left: 1px solid #333; border-right: 1px solid #333; }
         table.itens tr:nth-child(even) { background: #f9f9f9; }
+        table.itens tr:last-child td { border-bottom: 1px solid #333; }
+        
+        .itens-total {
+            margin-top: 3mm;
+            padding: 2mm;
+            background: #f0f0f0;
+            text-align: right;
+            font-size: 9px;
+            border-top: 1px solid #000;
+        }
         
         .totais { background: #f0f0f0; padding: 3mm; margin-top: 3mm; }
         .totais-row { display: flex; justify-content: space-between; padding: 1mm 0; }
@@ -152,6 +164,19 @@ class DanfeService
         .chave-box { background: #f5f5f5; padding: 3mm; text-align: center; border: 1px solid #333; margin: 3mm 0; }
         .chave-box .label { font-size: 8px; color: #666; }
         .chave-box .valor { font-size: 10px; font-family: monospace; font-weight: bold; }
+        
+        .consumidor-box { 
+            background: transparent; 
+            border: 1px solid #333; 
+            padding: 3mm; 
+            margin-top: 3mm; 
+            text-align: center;
+        }
+        .consumidor-box strong { font-size: 9px; }
+        .consumidor-info { 
+            font-size: 8px; 
+            margin-top: 2mm; 
+        }
         
         .footer { font-size: 8px; color: #666; text-align: center; margin-top: 5mm; border-top: 1px solid #ccc; padding-top: 3mm; }
         
@@ -249,9 +274,14 @@ HTML;
                 <tbody>
 HTML;
 
-        foreach ($data['itens'] ?? [] as $item) {
+        $totalItens = count($data['itens'] ?? []);
+
+        foreach ($data['itens'] ?? [] as $index => $item) {
+            $isLastItem = $index === $totalItens - 1;
+            $borderStyle = $isLastItem ? 'border-bottom: 1px solid #000;' : '';
+
             $html .= <<<HTML
-                    <tr>
+                    <tr style="{$borderStyle}">
                         <td>{$item['codigo']}</td>
                         <td>{$item['descricao']}</td>
                         <td class="text-center">{$item['ncm']}</td>
@@ -266,6 +296,9 @@ HTML;
         $html .= <<<HTML
                 </tbody>
             </table>
+            <div class="itens-total">
+                <strong>QTD. TOTAL DE ITENS:</strong> {$totalItens}
+            </div>
         </div>
         
         <div class="totais">
@@ -317,6 +350,15 @@ HTML;
             </div>
         </div>
         
+        <div class="consumidor-box">
+            <strong>CONSUMIDOR</strong>
+            <div class="consumidor-info">
+                CNPJ/CPF/ID Estrangeiro: {$data['destinatario']['cnpj']}<br />
+                {$data['destinatario']['nome']}<br />
+                {$data['destinatario']['endereco']} - {$data['destinatario']['bairro']} - {$data['destinatario']['municipio']} - {$data['destinatario']['uf']}
+            </div>
+        </div>
+        
         <div class="footer">
             <p>Documento emitido via sistema NexusEcom</p>
             <p>NF-e {$tipoDoc} - {$data['numero']}/{$data['serie']} - {$data['data_emissao']}</p>
@@ -339,7 +381,7 @@ HTML;
     {
         $data = $this->nfeData;
         $cfg = $this->config;
-        
+
         $logoUrl = null;
         if ($cfg['show_logo'] && $cfg['logo_path']) {
             $logoUrl = Storage::url($cfg['logo_path']);
@@ -347,17 +389,17 @@ HTML;
 
         $chave = $data['chave'] ?? '';
         $barcodeData = $this->generateBarcode($chave);
-        
+
         $qtdItens = $data['quantidade_itens'] ?? 1;
         $qtdDestaqueClass = $qtdItens > 1 ? 'qtd-multiplos' : 'qtd-unico';
         $qtdDestaqueTexto = $qtdItens > 1 ? 'ITENS PARA SEPARAR' : 'ÚNICO ITEM';
         $qtdDestaqueNum = $qtdItens;
         $qtdDestaqueLabel = $qtdItens > 1 ? 'ITENS' : 'ITEM';
-        
+
         $itens = array_slice($data['itens'] ?? [], 0, 5);
         $temMaisItens = count($data['itens'] ?? []) > 5;
-        
-        $html = <<<HTML
+
+        $html = <<<'HTML'
 <!DOCTYPE html>
 <html>
 <head>
@@ -527,19 +569,19 @@ HTML;
         try {
             $xmlObj = simplexml_load_string($xml);
             $ns = $xmlObj->getNamespaces(true);
-            
+
             $data = [];
-            
+
             $infNFe = $xmlObj->NFe->infNFe;
             $data['chave'] = (string) $infNFe['Id'];
             $data['chave'] = str_replace('NFe', '', $data['chave']);
-            
+
             $data['numero'] = (string) $infNFe->ide->nNF;
             $data['serie'] = (string) $infNFe->ide->serie;
             $data['data_emissao'] = (string) $infNFe->ide->dhEmi;
             $data['modelo'] = (string) $infNFe->ide->mod;
             $data['tipo_operacao'] = (string) $infNFe->ide->tpNF;
-            
+
             $emit = $infNFe->emit;
             $data['emitente'] = [
                 'nome' => (string) $emit->xNome,
@@ -559,6 +601,11 @@ HTML;
             $data['destinatario'] = [
                 'nome' => (string) ($dest->xNome ?? 'CONSUMIDOR'),
                 'cnpj' => (string) ($dest->CNPJ ?? $dest->CPF ?? ''),
+                'endereco' => isset($dest->enderDest) ? (string) $dest->enderDest->xLgr : '',
+                'numero' => isset($dest->enderDest) ? (string) $dest->enderDest->nro : '',
+                'bairro' => isset($dest->enderDest) ? (string) $dest->enderDest->xBairro : '',
+                'municipio' => isset($dest->enderDest) ? (string) $dest->enderDest->xMun : '',
+                'uf' => isset($dest->enderDest) ? (string) $dest->enderDest->UF : '',
             ];
 
             $data['itens'] = [];
@@ -566,7 +613,7 @@ HTML;
                 foreach ($infNFe->det as $item) {
                     $prod = $item->prod;
                     $imposto = $item->imposto;
-                    
+
                     $data['itens'][] = [
                         'codigo' => (string) $prod->cProd,
                         'descricao' => (string) $prod->xProd,
@@ -602,7 +649,7 @@ HTML;
             return $data;
         } catch (\Exception $e) {
             return [
-                'error' => 'Erro ao processar XML: ' . $e->getMessage(),
+                'error' => 'Erro ao processar XML: '.$e->getMessage(),
                 'chave' => '',
                 'numero' => '0',
                 'serie' => '0',
@@ -727,7 +774,7 @@ HTML;
             $qtdItens = $data['quantidade_itens'];
             $destaqueClass = $qtdItens > 1 ? 'quantidade-multiplos' : 'quantidade-unico';
             $destaqueTexto = $qtdItens > 1 ? 'ITENS PARA SEPARAR' : 'ÚNICO ITEM';
-            
+
             $html .= <<<HTML
         <div class="{$destaqueClass}">
             <div class="num">{$qtdItens}</div>
@@ -744,13 +791,13 @@ HTML;
 HTML;
 
             if ($cfg['show_valor_itens']) {
-                $html .= <<<HTML
+                $html .= <<<'HTML'
                     <th style="width:12%" class="text-right">Vl. Unit</th>
                     <th style="width:13%" class="text-right">Vl. Total</th>
 HTML;
             }
 
-            $html .= <<<HTML
+            $html .= <<<'HTML'
                 </tr>
             </thead>
             <tbody>
@@ -775,7 +822,7 @@ HTML;
                 $html .= '</tr>';
             }
 
-            $html .= <<<HTML
+            $html .= <<<'HTML'
             </tbody>
         </table>
 HTML;
@@ -828,7 +875,7 @@ HTML;
 
         $chave = $data['chave'] ?? '';
         $barcodeData = $this->generateBarcode($chave);
-        
+
         $html .= <<<HTML
         <div class="chave-box">
             <strong>Chave de Acesso:</strong><br>
@@ -859,7 +906,7 @@ HTML;
 HTML;
         }
 
-        $html .= <<<HTML
+        $html .= <<<'HTML'
     </div>
     <script>
         window.onload = function() {
