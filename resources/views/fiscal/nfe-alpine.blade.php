@@ -86,6 +86,19 @@
                 <input type="text" x-model="search" @input.debounce.300ms="currentPage = 1; loadNfe()" placeholder="Número, Chave ou Nome..." 
                        class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-4 py-2 text-xs font-bold italic text-white focus:border-indigo-500 outline-none">
             </div>
+            <div class="flex gap-2">
+                <select x-model="associationFilter" @change="currentPage = 1; loadNfe()" 
+                        class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold italic text-white focus:border-indigo-500 outline-none">
+                    <option value="">Todas</option>
+                    <option value="pending">Pendentes</option>
+                    <option value="partial">Parciais</option>
+                    <option value="associated">Associadas</option>
+                </select>
+                <button @click="reprocessSelected()" :disabled="selected.length === 0"
+                        class="px-3 py-2 bg-amber-600 hover:bg-amber-500 rounded-xl text-xs font-bold italic text-white flex items-center gap-2 disabled:opacity-50">
+                    <i class="fas fa-sync"></i> Reprocessar
+                </button>
+            </div>
         </div>
         
         <div class="overflow-x-auto">
@@ -99,6 +112,7 @@
                         <th class="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest italic text-left">Emitente / Destinatário</th>
                         <th class="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest italic text-right">Valor Total</th>
                         <th class="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest italic text-center">Status</th>
+                        <th class="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest italic text-center">Associação</th>
                         <th class="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest italic text-right">Ações</th>
                     </tr>
                 </thead>
@@ -127,6 +141,11 @@
                             <td class="px-6 py-4 text-center">
                                 <span class="px-3 py-1 rounded-full text-[10px] font-black uppercase italic" 
                                       :class="getStatusClass(n.status_nfe)" x-text="n.status_nfe"></span>
+                            </td>
+                            <td class="px-6 py-4 text-center">
+                                <span class="px-2 py-1 rounded-full text-[9px] font-black uppercase italic" 
+                                      :class="getAssociationClass(n.association_status)" 
+                                      x-text="getAssociationLabel(n.association_status)"></span>
                             </td>
                             <td class="px-6 py-4 text-right">
                                 <div class="flex justify-end gap-2">
@@ -185,6 +204,7 @@ function fiscalPage() {
     return {
         view: 'recebidas',
         filtroSituacao: '',
+        associationFilter: '',
         dataInicio: '',
         dataFim: '',
         search: '',
@@ -305,6 +325,49 @@ function fiscalPage() {
             if (s === 'autorizada') return 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400';
             if (s === 'cancelada') return 'bg-rose-500/10 border border-rose-500/20 text-rose-400';
             return 'bg-amber-500/10 border border-amber-500/20 text-amber-400';
+        },
+        
+        getAssociationClass(status) {
+            if (status === 'associated') return 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400';
+            if (status === 'partial') return 'bg-amber-500/10 border border-amber-500/20 text-amber-400';
+            return 'bg-slate-500/10 border border-slate-500/20 text-slate-400';
+        },
+        
+        getAssociationLabel(status) {
+            if (status === 'associated') return 'Associada';
+            if (status === 'partial') return 'Parcial';
+            return 'Pendente';
+        },
+        
+        async reprocessSelected() {
+            if (this.selected.length === 0) return;
+            
+            if (!confirm(`Reprocessar ${this.selected.length} notas?`)) return;
+            
+            this.loading = true;
+            try {
+                const response = await fetch('/api/nfe/reprocess-association', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({
+                        ids: this.selected,
+                        type: this.view === 'recebidas' ? 'recebida' : 'emitida'
+                    })
+                });
+                
+                if (response.ok) {
+                    this.selected = [];
+                    await this.loadNfe();
+                    alert('Associação reprocessada com sucesso!');
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Erro ao reprocessar');
+            }
+            this.loading = false;
         },
         
         formatDate(date) {

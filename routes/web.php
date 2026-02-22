@@ -215,6 +215,7 @@ Route::prefix('api')->middleware('auth')->group(function () {
     Route::get('/nfes', [App\Http\Controllers\Api\NfeController::class, 'index']);
     Route::get('/nfes/{id}', [App\Http\Controllers\Api\NfeController::class, 'show']);
     Route::post('/nfes/import', [App\Http\Controllers\Api\NfeController::class, 'import']);
+    Route::post('/nfes/reprocess-association', [App\Http\Controllers\Api\NfeController::class, 'reprocessAssociation']);
 
     Route::get('/estoque', [App\Http\Controllers\Api\EstoqueController::class, 'index']);
     Route::get('/estoque/depositos', [App\Http\Controllers\Api\EstoqueController::class, 'depositos']);

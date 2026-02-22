@@ -333,6 +333,53 @@
                     </div>
                 </div>
 
+                <!-- Multiple SKUs -->
+                <div class="bg-slate-800 rounded-xl border border-slate-700 p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="font-bold flex items-center gap-2">
+                            <i class="fas fa-barcode text-indigo-400"></i> SKUs Adicionais
+                        </h2>
+                        <button @click="addSku()" class="px-3 py-1 bg-indigo-600 rounded-lg text-sm">
+                            <i class="fas fa-plus"></i> Adicionar SKU
+                        </button>
+                    </div>
+                    
+                    <p class="text-xs text-slate-500 mb-4">Adicione SKUs adicionais para o produto (ex: DBA, FBA, ML, diferentes fornecedores). Uma deve ser marcada como principal.</p>
+                    
+                    <div class="space-y-3">
+                        <template x-for="(sku, index) in skus" :key="index">
+                            <div class="flex gap-3 items-center p-3 bg-slate-700/50 rounded-lg border border-slate-600">
+                                <div class="w-8">
+                                    <input 
+                                        type="radio" 
+                                        :name="'sku-principal-' + index"
+                                        :checked="sku.is_principal"
+                                        @change="setPrincipalSku(index)"
+                                        class="w-4 h-4 text-indigo-600"
+                                    >
+                                </div>
+                                <div class="flex-1">
+                                    <input type="text" x-model="sku.sku" placeholder="Código SKU" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm">
+                                </div>
+                                <div class="w-32">
+                                    <input type="text" x-model="sku.label" placeholder="Label (ex: FBA, DBA)" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm">
+                                </div>
+                                <div class="w-24">
+                                    <input type="text" x-model="sku.gtin" placeholder="EAN/GTIN" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm">
+                                </div>
+                                <button @click="removeSku(index)" class="p-2 text-red-400 hover:text-red-300">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </template>
+                        
+                        <div x-show="skus.length === 0" class="text-center py-6 text-slate-500">
+                            <i class="fas fa-barcode text-2xl mb-2 opacity-50"></i>
+                            <p>Nenhuma SKU adicional</p>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Compound -->
                 <div x-show="product.tipo === 'composto'" class="bg-slate-800 rounded-xl border border-slate-700 p-6">
                     <div class="flex items-center justify-between mb-4">
@@ -445,6 +492,7 @@
             },
             
             variations: [],
+            skus: [],
             components: [],
             
             // Compound search
@@ -542,6 +590,17 @@
                         }));
                     }
                     
+                    // Load SKUs
+                    if (data.skus) {
+                        this.skus = data.skus.map(s => ({
+                            id: s.id,
+                            sku: s.sku || '',
+                            label: s.label || '',
+                            gtin: s.gtin || '',
+                            is_principal: s.is_principal || false,
+                        }));
+                    }
+                    
                 } catch (e) {
                     console.error('Error loading product:', e);
                     this.errorMessage = 'Erro ao carregar produto';
@@ -563,6 +622,31 @@
             
             removeVariation(index) {
                 this.variations.splice(index, 1);
+            },
+            
+            // SKUs
+            addSku() {
+                this.skus.push({
+                    sku: '',
+                    label: '',
+                    gtin: '',
+                    is_principal: this.skus.length === 0, // First one is principal
+                });
+            },
+            
+            removeSku(index) {
+                const wasPrincipal = this.skus[index].is_principal;
+                this.skus.splice(index, 1);
+                // If removed was principal, set first as principal
+                if (wasPrincipal && this.skus.length > 0) {
+                    this.skus[0].is_principal = true;
+                }
+            },
+            
+            setPrincipalSku(index) {
+                this.skus.forEach((sku, i) => {
+                    sku.is_principal = i === index;
+                });
             },
             
             // Compound
@@ -628,7 +712,8 @@
                         body: JSON.stringify({
                             ...this.product,
                             variations: this.variations,
-                            components: this.components
+                            components: this.components,
+                            skus: this.skus
                         })
                     });
                     

@@ -136,4 +136,31 @@ class NfeController extends Controller
             'message' => 'Importação iniciada',
         ]);
     }
+
+    public function reprocessAssociation(Request $request)
+    {
+        $ids = $request->input('ids', []);
+        $type = $request->input('type', 'emitida');
+        
+        $model = $type === 'recebida' ? \App\Models\NfeRecebida::class : \App\Models\NfeEmitida::class;
+        
+        $notas = $model::with('itens')->whereIn('id', $ids)->get();
+        $totalAssociated = 0;
+        
+        foreach ($notas as $nota) {
+            $grupoId = $nota->empresa?->grupo_id;
+            if (!$grupoId) continue;
+            
+            foreach ($nota->itens as $item) {
+                if ($item->associateProduct($grupoId)) {
+                    $totalAssociated++;
+                }
+            }
+        }
+        
+        return response()->json([
+            'success' => true,
+            'message' => "{$totalAssociated} produtos associados",
+        ]);
+    }
 }

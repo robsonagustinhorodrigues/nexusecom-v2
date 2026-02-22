@@ -84,4 +84,46 @@ class NfeItem extends Model
     {
         return $this->belongsTo(Product::class, 'product_id');
     }
+
+    /**
+     * Associa produto automaticamente por SKU ou EAN
+     */
+    public function associateProduct(int $grupoId): bool
+    {
+        // 1. Try by SKU (codigo_produto)
+        if (!empty($this->codigo_produto)) {
+            $product = Product::where('grupo_id', $grupoId)
+                ->where('sku', $this->codigo_produto)
+                ->first();
+            
+            if ($product) {
+                $this->product_id = $product->id;
+                $this->save();
+                return true;
+            }
+        }
+
+        // 2. Try by EAN/GTIN
+        if (!empty($this->gtin)) {
+            $product = Product::where('grupo_id', $grupoId)
+                ->where('ean', $this->gtin)
+                ->first();
+            
+            if ($product) {
+                $this->product_id = $product->id;
+                $this->save();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Get association status
+     */
+    public function getAssociationStatusAttribute(): string
+    {
+        return $this->product_id ? 'associated' : 'pending';
+    }
 }

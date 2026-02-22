@@ -817,6 +817,13 @@ class FiscalService
                 }
 
                 NfeItem::create($itemData);
+                
+                // Auto-associate product by SKU
+                $item = NfeItem::latest()->first();
+                if ($item) {
+                    $item->associateProduct($empresa->grupo_id);
+                }
+                
                 $itensSalvos++;
             }
         } catch (\Exception $e) {

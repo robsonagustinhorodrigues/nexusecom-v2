@@ -56,4 +56,35 @@ class NfeEmitida extends Model
     {
         return $this->hasMany(NfeItem::class, 'nfe_emitida_id');
     }
+
+    /**
+     * Get association status: associated, partial, pending
+     */
+    public function getAssociationStatusAttribute(): string
+    {
+        $total = $this->itens()->count();
+        if ($total === 0) return 'pending';
+        
+        $associated = $this->itens()->whereNotNull('product_id')->count();
+        
+        if ($associated === $total) return 'associated';
+        if ($associated > 0) return 'partial';
+        return 'pending';
+    }
+
+    /**
+     * Count associated items
+     */
+    public function getAssociatedCountAttribute(): int
+    {
+        return $this->itens()->whereNotNull('product_id')->count();
+    }
+
+    /**
+     * Count pending items
+     */
+    public function getPendingCountAttribute(): int
+    {
+        return $this->itens()->whereNull('product_id')->count();
+    }
 }

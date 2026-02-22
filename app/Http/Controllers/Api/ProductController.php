@@ -225,9 +225,27 @@ class ProductController extends Controller
             }
         }
 
+        // Handle additional SKUs
+        if ($request->has('skus') && $request->skus) {
+            // Delete existing skus
+            $product->skus()->delete();
+            
+            foreach ($request->skus as $sku) {
+                if (!empty($sku['sku'])) {
+                    $product->skus()->create([
+                        'sku' => $sku['sku'],
+                        'label' => $sku['label'] ?? null,
+                        'gtin' => $sku['gtin'] ?? null,
+                        'is_principal' => $sku['is_principal'] ?? false,
+                        'grupo_id' => $grupoId,
+                    ]);
+                }
+            }
+        }
+
         return response()->json([
             'success' => true,
-            'product' => $product,
+            'product' => $product->load('skus', 'variations', 'components.componentProduct'),
             'message' => 'Produto atualizado com sucesso!',
         ]);
     }
