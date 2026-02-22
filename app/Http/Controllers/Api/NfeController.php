@@ -163,4 +163,137 @@ class NfeController extends Controller
             'message' => "{$totalAssociated} produtos associados",
         ]);
     }
+
+    /**
+     * Importa NF-e do Mercado Livre por data
+     */
+    public function importMeli(Request $request)
+    {
+        $request->validate([
+            'data_inicio' => 'required|date',
+            'data_fim' => 'required|date',
+        ]);
+
+        $empresaId = session('empresa_id', 6);
+        $empresa = \App\Models\Empresa::find($empresaId);
+
+        if (!$empresa) {
+            return response()->json(['success' => false, 'message' => 'Empresa não encontrada']);
+        }
+
+        // Verificar se tem integração com Mercado Livre
+        $integracao = $empresa->integracoes()->where('marketplace', 'mercadolivre')->first();
+        
+        if (!$integracao) {
+            return response()->json(['success' => false, 'message' => 'Integração do Mercado Livre não encontrada. Configure em Integrações.']);
+        }
+
+        if ($integracao->isExpired()) {
+            return response()->json(['success' => false, 'message' => 'Token do Mercado Livre expirado. Reconecte a integração.']);
+        }
+
+        try {
+            // Criar tarefa para rastrear
+            $tarefa = \App\Models\Tarefa::create([
+                'empresa_id' => $empresa->id,
+                'tipo' => 'import_nfe_meli',
+                'descricao' => "Importar NF-es do Mercado Livre de {$request->data_inicio} até {$request->data_fim}",
+                'status' => 'processando',
+                'progresso' => 0,
+            ]);
+
+            // Dispatch job para processar em background
+            \App\Jobs\ImportarNFeMeliJob::dispatch($empresa, $request->data_inicio, $request->data_fim, $tarefa->id);
+
+            return response()->json([
+                'success' => true,
+                'job_id' => $tarefa->id,
+                'message' => 'Importação iniciada em background',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => 'Erro: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Importa NF-e de arquivo XML
+     */
+    public function importXml(Request $request)
+    {
+        $request->validate([
+            'xml' => 'required|file|mimes:xml',
+        ]);
+
+        $empresaId = session('empresa_id', 6);
+        $empresa = \App\Models\Empresa::find($empresaId);
+
+        if (!$empresa) {
+            return response()->json(['success' => false, 'message' => 'Empresa não encontrada']);
+        }
+
+        try {
+            $xmlContent = file_get_contents($request->file('xml')->getRealPath());
+            
+            $fiscalService = new \App\Services\FiscalService($empresa);
+            $result = $fiscalService->processXmlContent($empresa, $xmlContent);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'XML importado com sucesso',
+                'data' => $result,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => 'Erro: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Importa NF-e de arquivo ZIP
+     */
+    public function importZip(Request $request)
+    {
+        $request->validate([
+            'zip' => 'required|file|mimes:zip',
+        ]);
+
+        $empresaId = session('empresa_id', 6);
+        $empresa = \App\Models\Empresa::find($empresaId);
+
+        if (!$empresa) {
+            return response()->json(['success' => false, 'message' => 'Empresa não encontrada']);
+        }
+
+        try {
+            $zip = new \ZipArchive();
+            $filePath = $request->file('zip')->getRealPath();
+            
+            if ($zip->open($filePath) !== true) {
+                return response()->json(['success' => false, 'message' => 'Não foi possível abrir o arquivo ZIP']);
+            }
+
+            $processed = 0;
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $fileName = $zip->getNameIndex($i);
+                
+                if (substr($fileName, -1) === '/' || pathinfo($fileName, PATHINFO_EXTENSION) !== 'xml') {
+                    continue;
+                }
+
+                $xmlContent = $zip->getFromIndex($i);
+                if ($xmlContent) {
+                    \App\Jobs\ImportarNFeMeliJob::dispatch($empresa, $xmlContent);
+                    $processed++;
+                }
+            }
+
+            $zip->close();
+
+            return response()->json([
+                'success' => true,
+                'message' => "{$processed} notas enviadas para processamento",
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => 'Erro: ' . $e->getMessage()]);
+        }
+    }
 }

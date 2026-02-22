@@ -91,6 +91,47 @@
                 </div>
 
                 <div class="flex items-center gap-3">
+                    <!-- Notifications Bell -->
+                    <div class="relative" x-data="{ notifOpen: false }">
+                        <button @click="notifOpen = !notifOpen" class="p-2 text-slate-400 hover:text-white relative">
+                            <i class="fas fa-bell"></i>
+                            <span x-show="notifCount > 0" x-text="notifCount" class="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center"></span>
+                        </button>
+                        <div x-show="notifOpen" @click.away="notifOpen = false" x-transition x-cloak 
+                             class="absolute right-0 mt-2 w-80 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl z-50 overflow-hidden">
+                            <div class="p-3 border-b border-slate-700 flex justify-between items-center">
+                                <span class="font-bold text-white text-sm">Notificações</span>
+                                <a href="/admin/avisos" class="text-xs text-indigo-400 hover:text-indigo-300">Ver todas</a>
+                            </div>
+                            <div class="max-h-80 overflow-y-auto">
+                                <template x-for="n in notifications" :key="n.id">
+                                    <div class="p-3 border-b border-slate-700/50 hover:bg-slate-700/30">
+                                        <div class="flex gap-3">
+                                            <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                                                 :class="n.type === 'success' ? 'bg-emerald-500/20 text-emerald-400' : n.type === 'error' ? 'bg-rose-500/20 text-rose-400' : 'bg-indigo-500/20 text-indigo-400'">
+                                                <i :class="n.type === 'success' ? 'fa-check' : n.type === 'error' ? 'fa-times' : 'fa-info'" class="fas text-xs"></i>
+                                            </div>
+                                            <div class="flex-1 min-w-0">
+                                                <p class="text-xs text-white font-bold truncate" x-text="n.title"></p>
+                                                <p class="text-[10px] text-slate-400 truncate" x-text="n.message"></p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                                <div x-show="notifications.length === 0" class="p-6 text-center text-slate-500 text-xs">
+                                    Nenhuma notificação
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tasks Icon -->
+                    <a href="/admin/tarefas" class="p-2 text-slate-400 hover:text-white relative">
+                        <i class="fas fa-tasks"></i>
+                    </a>
+
+                    <div class="h-6 w-px bg-slate-700 mx-1"></div>
+
                     <!-- Seletor de Empresa (Alpine Version) -->
                     <select x-model="empresaId" @change="changeEmpresa()" 
                             class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs font-bold text-indigo-400 outline-none focus:border-indigo-500">
@@ -139,6 +180,8 @@
         return {
             sidebarOpen: window.innerWidth >= 1024,
             empresaId: localStorage.getItem('empresa_id') || '4',
+            notifications: [],
+            notifCount: 0,
             
             init() {
                 window.addEventListener('resize', () => {
@@ -147,12 +190,26 @@
                 this.$watch('empresaId', (val) => {
                     localStorage.setItem('empresa_id', val);
                 });
+                this.loadNotifications();
+                // Refresh notifications every 30 seconds
+                setInterval(() => this.loadNotifications(), 30000);
             },
 
             changeEmpresa() {
                 window.dispatchEvent(new CustomEvent('empresa-changed', { 
                     detail: this.empresaId 
                 }));
+            },
+
+            async loadNotifications() {
+                try {
+                    const res = await fetch('/api/admin/notificacoes');
+                    if (res.ok) {
+                        const data = await res.json();
+                        this.notifications = data.notificacoes || [];
+                        this.notifCount = this.notifications.filter(n => !n.read).length;
+                    }
+                } catch (e) { console.error(e); }
             }
         }
     }

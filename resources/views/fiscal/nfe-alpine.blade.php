@@ -32,10 +32,62 @@
                 <option value="inutilizada">Inutilizada</option>
             </select>
 
-            <button @click="importNfe()" :disabled="importing" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl font-black italic uppercase text-xs transition-all flex items-center gap-2">
-                <i class="fas fa-cloud-download-alt" :class="importing ? 'animate-bounce' : ''"></i>
-                <span x-text="importing ? 'Sincronizando...' : 'Sincronizar SEFAZ'"></span>
-            </button>
+            <!-- Dropdown de Importação -->
+            <div class="relative" x-data="{ importMenu: false }">
+                <button @click="importMenu = !importMenu" :disabled="importing" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl font-black italic uppercase text-xs transition-all flex items-center gap-2">
+                    <i class="fas fa-plus" :class="importing ? 'animate-bounce' : ''"></i>
+                    <span x-text="importing ? 'Importando...' : 'Importar'"></span>
+                    <i class="fas fa-chevron-down text-[10px]"></i>
+                </button>
+                
+                <!-- Dropdown Menu -->
+                <div x-show="importMenu" @click.away="importMenu = false" x-cloak
+                     class="absolute right-0 mt-2 w-64 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl z-50 overflow-hidden">
+                    <div class="p-2">
+                        <p class="text-[10px] font-black text-slate-500 uppercase px-3 py-2">Fontes de Dados</p>
+                        <button @click="importMenu = false; importFromMeli()" 
+                                class="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-left hover:bg-slate-700/50 transition-colors">
+                            <div class="w-8 h-8 rounded-lg bg-yellow-500/20 flex items-center justify-center">
+                                <i class="fab fa-mercury text-yellow-400 text-sm"></i>
+                            </div>
+                            <div>
+                                <p class="text-xs font-bold text-white">Mercado Livre</p>
+                                <p class="text-[10px] text-slate-500">Importar NF-es por data</p>
+                            </div>
+                        </button>
+                        <button @click="importMenu = false; importFromSefaz()" 
+                                class="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-left hover:bg-slate-700/50 transition-colors">
+                            <div class="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                                <i class="fas fa-file-invoice-dollar text-blue-400 text-sm"></i>
+                            </div>
+                            <div>
+                                <p class="text-xs font-bold text-white">SEFAZ</p>
+                                <p class="text-[10px] text-slate-500">Buscar notasEmitidas pela SEFAZ</p>
+                            </div>
+                        </button>
+                        <button @click="importMenu = false; importXml()" 
+                                class="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-left hover:bg-slate-700/50 transition-colors">
+                            <div class="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                                <i class="fas fa-file-code text-emerald-400 text-sm"></i>
+                            </div>
+                            <div>
+                                <p class="text-xs font-bold text-white">XML / ZIP</p>
+                                <p class="text-[10px] text-slate-500">Importar XML ou arquivo compactado</p>
+                            </div>
+                        </button>
+                        <button @click="importMenu = false; importFromBling()" 
+                                class="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-left hover:bg-slate-700/50 transition-colors">
+                            <div class="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                                <i class="fas fa-box text-orange-400 text-sm"></i>
+                            </div>
+                            <div>
+                                <p class="text-xs font-bold text-white">Bling</p>
+                                <p class="text-[10px] text-slate-500">Importar notas do Bling</p>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -95,6 +147,42 @@
                             class="px-3 py-2 bg-amber-600 hover:bg-amber-500 rounded-xl text-xs font-bold italic text-white flex items-center gap-2 disabled:opacity-50">
                         <i class="fas fa-sync"></i>
                     </button>
+                    
+                    <!-- Import Dropdown -->
+                    <div class="relative" x-data="{ open: false }">
+                        <button @click="open = !open" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold italic text-white flex items-center gap-2">
+                            <i class="fas fa-download"></i>
+                            <span class="hidden md:inline">Importar</span>
+                            <i class="fas fa-chevron-down text-[10px]"></i>
+                        </button>
+                        <div x-show="open" @click.away="open = false" x-transition x-cloak 
+                             class="absolute right-0 mt-2 w-56 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl z-50 py-2">
+                            <button @click="showImportMeli = true; open = false" 
+                                    class="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white flex items-center gap-3">
+                                <i class="fab fa-mercadolivre text-rose-400"></i>
+                                <div>
+                                    <div class="font-bold">Mercado Livre</div>
+                                    <div class="text-[10px] text-slate-500">Importar por data</div>
+                                </div>
+                            </button>
+                            <button @click="showImportXml = true; open = false" 
+                                    class="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white flex items-center gap-3">
+                                <i class="fas fa-file-code text-indigo-400"></i>
+                                <div>
+                                    <div class="font-bold">XML</div>
+                                    <div class="text-[10px] text-slate-500">Importar arquivo XML</div>
+                                </div>
+                            </button>
+                            <button @click="showImportZip = true; open = false" 
+                                    class="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white flex items-center gap-3">
+                                <i class="fas fa-file-archive text-amber-400"></i>
+                                <div>
+                                    <div class="font-bold">ZIP</div>
+                                    <div class="text-[10px] text-slate-500">Importar arquivo ZIP</div>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
             
@@ -232,6 +320,13 @@ function fiscalPage() {
         dataInicio: '',
         dataFim: '',
         search: '',
+        showImportMeli: false,
+        showImportXml: false,
+        showImportZip: false,
+        importLoading: false,
+        importResult: null,
+        meliDataInicio: '',
+        meliDataFim: '',
         nfe: [],
         selected: [],
         loading: false,
@@ -332,6 +427,145 @@ function fiscalPage() {
             this.importing = false;
         },
         
+        async importFromSefaz() {
+            // Existing SEFAZ import
+            this.importing = true;
+            try {
+                const empresaId = localStorage.getItem('empresa_id') || '4';
+                const response = await fetch(`/api/nfes/import?empresa=${empresaId}`, {
+                    method: 'POST',
+                    headers: { 
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    await this.loadNfe();
+                    alert('Sincronização com SEFAZ concluída! ⚡');
+                } else {
+                    const error = await response.json();
+                    alert('Erro na sincronização: ' + (error.message || 'Erro desconhecido'));
+                }
+            } catch (e) {
+                console.error('Erro na importação:', e);
+                alert('Erro crítico na conexão com a API.');
+            }
+            this.importing = false;
+        },
+        
+        async importFromMeli() {
+            const dataInicio = prompt('Data inicial (YYYY-MM-DD):', this.dataInicio);
+            if (!dataInicio) return;
+            
+            const dataFim = prompt('Data final (YYYY-MM-DD):', this.dataFim);
+            if (!dataFim) return;
+            
+            this.importing = true;
+            try {
+                const empresaId = localStorage.getItem('empresa_id') || '4';
+                const response = await fetch('/api/nfes/import-meli', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({
+                        empresa_id: empresaId,
+                        data_inicio: dataInicio,
+                        data_fim: dataFim
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    alert(`Importação iniciada! Job ID: ${result.job_id || 'N/A'}\nNotas serão processadas em background.`);
+                    // Redirect to tarefas page
+                    window.location.href = '/admin/tarefas';
+                } else {
+                    alert('Erro: ' + (result.message || 'Erro desconhecido'));
+                }
+            } catch (e) {
+                console.error('Erro:', e);
+                alert('Erro na conexão.');
+            }
+            this.importing = false;
+        },
+        
+        async importXml() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.xml,.zip';
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                this.importing = true;
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                try {
+                    const response = await fetch('/api/nfes/import-xml', {
+                        method: 'POST',
+                        headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                        body: formData
+                    });
+                    
+                    const result = await response.json();
+                    if (response.ok) {
+                        alert(`Importado: ${result.imported || 0} notas`);
+                        await this.loadNfe();
+                    } else {
+                        alert('Erro: ' + (result.message || 'Erro'));
+                    }
+                } catch (e) {
+                    console.error(e);
+                    alert('Erro na conexão');
+                }
+                this.importing = false;
+            };
+            input.click();
+        },
+        
+        async importFromBling() {
+            const dataInicio = prompt('Data inicial (YYYY-MM-DD):', this.dataInicio);
+            if (!dataInicio) return;
+            
+            const dataFim = prompt('Data final (YYYY-MM-DD):', this.dataFim);
+            if (!dataFim) return;
+            
+            this.importing = true;
+            try {
+                const empresaId = localStorage.getItem('empresa_id') || '4';
+                const response = await fetch('/api/nfes/import-bling', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({
+                        empresa_id: empresaId,
+                        data_inicio: dataInicio,
+                        data_fim: dataFim
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    alert(`Importação iniciada! \nNotas serão processadas em background.`);
+                    window.location.href = '/admin/tarefas';
+                } else {
+                    alert('Erro: ' + (result.message || 'Erro desconhecido'));
+                }
+            } catch (e) {
+                console.error('Erro:', e);
+                alert('Erro na conexão.');
+            }
+            this.importing = false;
+        },
+        
         get totalValue() {
             return this.nfe.reduce((sum, n) => sum + parseFloat(n.valor_total || 0), 0);
         },
@@ -401,8 +635,188 @@ function fiscalPage() {
         
         formatMoney(value) {
             return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
+        },
+        
+        // Import functions
+        async importMeli() {
+            if (!this.meliDataInicio || !this.meliDataFim) {
+                alert('Selecione as datas inicial e final');
+                return;
+            }
+            
+            this.importLoading = true;
+            try {
+                const response = await fetch('/api/nfe/import/meli', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({
+                        data_inicio: this.meliDataInicio,
+                        data_fim: this.meliDataFim
+                    })
+                });
+                
+                const data = await response.json();
+                this.importResult = data;
+                if (data.success) {
+                    alert('Importação iniciada! As notas serão processadas em background.');
+                    this.showImportMeli = false;
+                    await this.loadNfe();
+                } else {
+                    alert('Erro: ' + (data.message || 'Erro desconhecido'));
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Erro ao iniciar importação');
+            }
+            this.importLoading = false;
+        },
+        
+        async importXml(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            this.importLoading = true;
+            const formData = new FormData();
+            formData.append('xml', file);
+            
+            try {
+                const response = await fetch('/api/nfe/import/xml', {
+                    method: 'POST',
+                    headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                    body: formData
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    alert('XML importado com sucesso!');
+                    this.showImportXml = false;
+                    await this.loadNfe();
+                } else {
+                    alert('Erro: ' + (data.message || 'Erro desconhecido'));
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Erro ao importar XML');
+            }
+            this.importLoading = false;
+        },
+        
+        async importZip(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            this.importLoading = true;
+            const formData = new FormData();
+            formData.append('zip', file);
+            
+            try {
+                const response = await fetch('/api/nfe/import/zip', {
+                    method: 'POST',
+                    headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                    body: formData
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    alert('ZIP importado! As notas serão processadas em background.');
+                    this.showImportZip = false;
+                    await this.loadNfe();
+                } else {
+                    alert('Erro: ' + (data.message || 'Erro desconhecido'));
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Erro ao importar ZIP');
+            }
+            this.importLoading = false;
         }
     }
 }
 </script>
+
+<!-- Import Modals -->
+<!-- Meli Import Modal -->
+<div x-show="showImportMeli" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md" @click.stop>
+        <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-rose-500/20 flex items-center justify-center">
+                    <i class="fab fa-mercadolivre text-rose-400"></i>
+                </div>
+                <h3 class="font-bold text-white">Importar do Mercado Livre</h3>
+            </div>
+            <button @click="showImportMeli = false" class="text-slate-400 hover:text-white">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <div class="space-y-4">
+            <div>
+                <label class="block text-xs font-bold text-slate-400 mb-2">Data Inicial</label>
+                <input type="date" x-model="meliDataInicio" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-400 mb-2">Data Final</label>
+                <input type="date" x-model="meliDataFim" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white">
+            </div>
+            
+            <p class="text-xs text-slate-500">As notas serão importadas em background. Acompanhe o progresso na aba de Tarefas.</p>
+            
+            <button @click="importMeli()" :disabled="importLoading"
+                    class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl flex items-center justify-center gap-2 disabled:opacity-50">
+                <i x-show="importLoading" class="fas fa-spinner fa-spin"></i>
+                <span x-show="!importLoading"><i class="fas fa-download"></i> Importar Notas</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- XML Import Modal -->
+<div x-show="showImportXml" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md" @click.stop>
+        <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center">
+                    <i class="fas fa-file-code text-indigo-400"></i>
+                </div>
+                <h3 class="font-bold text-white">Importar XML</h3>
+            </div>
+            <button @click="showImportXml = false" class="text-slate-400 hover:text-white">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <label class="border-2 border-dashed border-slate-600 rounded-xl p-8 flex flex-col items-center cursor-pointer hover:border-indigo-500 transition">
+            <i class="fas fa-cloud-upload-alt text-3xl text-slate-500 mb-2"></i>
+            <span class="text-sm text-slate-400">Clique para selecionar arquivo XML</span>
+            <input type="file" accept=".xml" @change="importXml($event)" class="hidden">
+        </label>
+    </div>
+</div>
+
+<!-- ZIP Import Modal -->
+<div x-show="showImportZip" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md" @click.stop>
+        <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                    <i class="fas fa-file-archive text-amber-400"></i>
+                </div>
+                <h3 class="font-bold text-white">Importar ZIP</h3>
+            </div>
+            <button @click="showImportZip = false" class="text-slate-400 hover:text-white">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <label class="border-2 border-dashed border-slate-600 rounded-xl p-8 flex flex-col items-center cursor-pointer hover:border-indigo-500 transition">
+            <i class="fas fa-cloud-upload-alt text-3xl text-slate-500 mb-2"></i>
+            <span class="text-sm text-slate-400">Clique para selecionar arquivo ZIP</span>
+            <input type="file" accept=".zip" @change="importZip($event)" class="hidden">
+        </label>
+    </div>
+</div>
 @endsection
