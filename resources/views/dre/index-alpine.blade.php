@@ -10,7 +10,6 @@
         <div>
             <h2 class="text-2xl font-black text-white tracking-tight italic uppercase">Demonstrativo de Resultados</h2>
             <p class="text-sm text-slate-400 italic underline decoration-indigo-500/50 decoration-2 underline-offset-4">Análise de Lucratividade & Performance Financeira</p>
-            <p class="text-sm text-slate-400 italic underline decoration-indigo-500/50 decoration-2 underline-offset-4">Análise de Lucratividade & Performance Financeira</p>
         </div>
 
         <div class="flex items-center gap-3 bg-slate-800 p-2 rounded-2xl border border-slate-700 shadow-lg">

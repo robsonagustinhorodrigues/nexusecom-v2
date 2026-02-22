@@ -188,6 +188,27 @@ class ProductController extends Controller
             'fotos_galeria' => $request->fotos_galeria ?? [],
         ]);
 
+        // Handle variations (SKUs)
+        if ($validated['tipo'] === 'variacao' && $request->variations) {
+            // Delete existing variations
+            $product->variations()->delete();
+            
+            foreach ($request->variations as $var) {
+                if (!empty($var['sku'])) {
+                    $product->variations()->create([
+                        'sku' => $var['sku'],
+                        'label' => $var['label'] ?? 'Variação',
+                        'variation_color' => $var['color'] ?? null,
+                        'variation_size' => $var['size'] ?? null,
+                        'preco_venda' => $var['preco_venda'] ?? 0,
+                        'preco_custo' => $var['preco_custo'] ?? 0,
+                        'estoque' => $var['estoque'] ?? 0,
+                        'grupo_id' => $grupoId,
+                    ]);
+                }
+            }
+        }
+
         if ($validated['tipo'] === 'composto') {
             $product->components()->delete();
 

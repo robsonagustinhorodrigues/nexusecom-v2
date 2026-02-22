@@ -8,7 +8,7 @@
     <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4 mb-8">
         <div>
             <h2 class="text-2xl font-black text-white tracking-tight italic uppercase">Integrações Marketplace</h2>
-            <p class="text-sm text-slate-400">Conecte suas lojas e gerencie suas vendas</p>
+            <p class="text-sm text-slate-400 italic underline decoration-indigo-500/50 decoration-2 underline-offset-4">Conecte suas lojas e sincronize pedidos</p>
         </div>
     </div>
 

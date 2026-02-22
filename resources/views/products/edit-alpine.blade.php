@@ -138,13 +138,25 @@
                     
                     <!-- Galeria de Fotos -->
                     <div>
-                        <label class="block text-sm text-slate-400 mb-2">Fotos Adicionais</label>
+                        <div class="flex items-center justify-between mb-2">
+                            <label class="block text-sm text-slate-400">Fotos Adicionais</label>
+                            <span class="text-xs text-slate-500" x-text="'(' + product.fotos_galeria.length + '/10)'"></span>
+                        </div>
                         <div class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                             <!-- Adicionar foto -->
-                            <label class="aspect-square rounded-xl border-2 border-dashed border-slate-600 flex flex-col items-center justify-center text-slate-500 hover:border-indigo-500 hover:text-indigo-500 cursor-pointer transition-all">
+                            <label 
+                                :class="product.fotos_galeria.length >= 10 ? 'opacity-30 cursor-not-allowed' : ''"
+                                class="aspect-square rounded-xl border-2 border-dashed border-slate-600 flex flex-col items-center justify-center text-slate-500 hover:border-indigo-500 hover:text-indigo-500 cursor-pointer transition-all"
+                            >
                                 <i class="fas fa-plus text-xl mb-1"></i>
                                 <span class="text-xs font-medium">Adicionar</span>
-                                <input type="text" @change="addGalleryPhoto($event)" placeholder="URL..." class="absolute opacity-0 w-full h-full cursor-pointer">
+                                <input 
+                                    type="text" 
+                                    @change="addGalleryPhoto($event)" 
+                                    placeholder="URL..." 
+                                    :disabled="product.fotos_galeria.length >= 10"
+                                    class="absolute opacity-0 w-full h-full cursor-pointer"
+                                >
                             </label>
                             
                             <!-- Fotos existentes -->
@@ -163,7 +175,7 @@
                                 </div>
                             </template>
                         </div>
-                        <p class="text-xs text-slate-500 mt-2">Arraste para reordenar. Clique no X para remover.</p>
+                        <p class="text-xs text-slate-500 mt-2">Arraste para reordenar. Máximo 10 fotos.</p>
                     </div>
                 </div>
 
@@ -643,6 +655,10 @@
             addGalleryPhoto(event) {
                 const url = event.target.value;
                 if (url && url.trim()) {
+                    if (this.product.fotos_galeria.length >= 10) {
+                        alert('Máximo de 10 fotos permitido!');
+                        return;
+                    }
                     this.product.fotos_galeria.push(url.trim());
                     event.target.value = '';
                 }

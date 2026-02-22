@@ -14,7 +14,6 @@
             <div>
                 <h2 class="text-2xl font-black text-white tracking-tight italic uppercase">Gestão de Equipe</h2>
                 <p class="text-sm text-slate-400 italic underline decoration-indigo-500/50 decoration-2 underline-offset-4">Controle de acessos e permissões do sistema</p>
-                <p class="text-sm text-slate-400 italic underline decoration-indigo-500/50 decoration-2 underline-offset-4">Controle de Acessos & Permissões</p>
             </div>
         </div>
 

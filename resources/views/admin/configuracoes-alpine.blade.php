@@ -14,7 +14,6 @@
             <div>
                 <h2 class="text-2xl font-black text-white tracking-tight italic uppercase">Configurações do Grupo</h2>
                 <p class="text-sm text-slate-400 italic underline decoration-indigo-500/50 decoration-2 underline-offset-4">Preferências globais e configurações do sistema</p>
-                <p class="text-sm text-slate-400 italic underline decoration-indigo-500/50 decoration-2 underline-offset-4">Parâmetros de Sistema & Performance</p>
             </div>
         </div>
 

@@ -10,7 +10,6 @@
         <div>
             <h2 class="text-2xl font-black text-white tracking-tight italic uppercase">Hub de Empresas</h2>
             <p class="text-sm text-slate-400 italic underline decoration-indigo-500/50 decoration-2 underline-offset-4">Gerenciamento de Unidades & Configurações Fiscais</p>
-            <p class="text-sm text-slate-400 italic underline decoration-indigo-500/50 decoration-2 underline-offset-4">Gerenciamento de Unidades & Configurações Fiscais</p>
         </div>
 
         <button @click="openCreate()" class="px-6 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-sm shadow-lg shadow-indigo-600/20 transition-all flex items-center gap-2 italic uppercase tracking-wider group">

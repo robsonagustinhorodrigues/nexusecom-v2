@@ -14,8 +14,11 @@ class ProductSku extends Model
 
     protected $fillable = [
         'product_id',
+        'variation_product_id',
         'grupo_id',
         'sku',
+        'is_principal',
+        'sort_order',
         'gtin',
         'ncm',
         'label',
@@ -40,6 +43,7 @@ class ProductSku extends Model
             'atributos_json' => 'array',
             'preco_venda'    => 'decimal:2',
             'preco_custo'    => 'decimal:2',
+            'is_principal'   => 'boolean',
         ];
     }
 
@@ -47,6 +51,11 @@ class ProductSku extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function variation(): BelongsTo
+    {
+        return $this->belongsTo(Product::class, 'variation_product_id');
     }
 
     public function fornecedor(): BelongsTo

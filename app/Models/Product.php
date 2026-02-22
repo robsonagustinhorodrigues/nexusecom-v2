@@ -100,6 +100,18 @@ class Product extends Model
         return $this->hasMany(ProductSku::class);
     }
 
+    // SKUs de uma variação específica
+    public function skusForVariation($variationId): HasMany
+    {
+        return $this->hasMany(ProductSku::class)->where('variation_product_id', $variationId);
+    }
+
+    // SKU principal
+    public function principalSku()
+    {
+        return $this->hasOne(ProductSku::class)->where('is_principal', true);
+    }
+
     // Produto Pai (se for variação)
     public function parent(): BelongsTo
     {
