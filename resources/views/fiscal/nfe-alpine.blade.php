@@ -76,28 +76,51 @@
 
     <!-- Tabela de Notas -->
     <div class="bg-slate-800 border border-slate-700 rounded-3xl overflow-hidden shadow-2xl">
-        <div class="p-6 border-b border-slate-700 bg-slate-900/50 flex items-center justify-between">
-            <div class="flex items-center gap-3">
-                <i class="fas fa-list text-indigo-500"></i>
-                <h3 class="font-black text-white italic uppercase tracking-tighter" x-text="'Listagem de Notas ' + (view === 'recebidas' ? 'Recebidas' : 'Emitidas')"></h3>
+        <div class="p-4 border-b border-slate-700 bg-slate-900/50">
+            <!-- Header Compacto -->
+            <div class="flex items-center justify-between gap-4">
+                <div class="flex items-center gap-3">
+                    <button @click="filtersOpen = !filtersOpen" class="flex items-center gap-2 text-slate-400 hover:text-white transition">
+                        <i class="fas" :class="filtersOpen ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                        <h3 class="font-black text-white italic uppercase tracking-tighter" x-text="'Listagem de Notas ' + (view === 'recebidas' ? 'Recebidas' : 'Emitidas')"></h3>
+                    </button>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="relative w-48">
+                        <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 text-xs"></i>
+                        <input type="text" x-model="search" @input.debounce.300ms="currentPage = 1; loadNfe()" placeholder="Buscar..." 
+                               class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-4 py-2 text-xs font-bold italic text-white focus:border-indigo-500 outline-none">
+                    </div>
+                    <button @click="reprocessSelected()" :disabled="selected.length === 0"
+                            class="px-3 py-2 bg-amber-600 hover:bg-amber-500 rounded-xl text-xs font-bold italic text-white flex items-center gap-2 disabled:opacity-50">
+                        <i class="fas fa-sync"></i>
+                    </button>
+                </div>
             </div>
-            <div class="relative w-64">
-                <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 text-xs"></i>
-                <input type="text" x-model="search" @input.debounce.300ms="currentPage = 1; loadNfe()" placeholder="Número, Chave ou Nome..." 
-                       class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-4 py-2 text-xs font-bold italic text-white focus:border-indigo-500 outline-none">
-            </div>
-            <div class="flex gap-2">
-                <select x-model="associationFilter" @change="currentPage = 1; loadNfe()" 
-                        class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold italic text-white focus:border-indigo-500 outline-none">
-                    <option value="">Todas</option>
-                    <option value="pending">Pendentes</option>
-                    <option value="partial">Parciais</option>
-                    <option value="associated">Associadas</option>
-                </select>
-                <button @click="reprocessSelected()" :disabled="selected.length === 0"
-                        class="px-3 py-2 bg-amber-600 hover:bg-amber-500 rounded-xl text-xs font-bold italic text-white flex items-center gap-2 disabled:opacity-50">
-                    <i class="fas fa-sync"></i> Reprocessar
-                </button>
+            
+            <!-- Filtros Colapsáveis -->
+            <div x-show="filtersOpen" x-collapse class="mt-4 pt-4 border-t border-slate-700/50">
+                <div class="flex flex-wrap items-center gap-4">
+                    <div class="flex items-center gap-2">
+                        <span class="text-[10px] font-black text-slate-500 uppercase italic">Data:</span>
+                        <input type="date" x-model="dataInicio" @change="currentPage = 1; loadNfe()" 
+                               class="bg-slate-900 border-none text-white font-black italic text-xs uppercase rounded-lg px-2 py-1">
+                        <span class="text-slate-600">até</span>
+                        <input type="date" x-model="dataFim" @change="currentPage = 1; loadNfe()" 
+                               class="bg-slate-900 border-none text-white font-black italic text-xs uppercase rounded-lg px-2 py-1">
+                    </div>
+                    
+                    <div class="flex items-center gap-2">
+                        <span class="text-[10px] font-black text-slate-500 uppercase italic">Associação:</span>
+                        <select x-model="associationFilter" @change="currentPage = 1; loadNfe()" 
+                                class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1 text-xs font-bold italic text-white focus:border-indigo-500 outline-none">
+                            <option value="">Todas</option>
+                            <option value="pending">Pendentes</option>
+                            <option value="partial">Parciais</option>
+                            <option value="associated">Associadas</option>
+                        </select>
+                    </div>
+                </div>
             </div>
         </div>
         
@@ -204,6 +227,7 @@ function fiscalPage() {
     return {
         view: 'recebidas',
         filtroSituacao: '',
+        filtersOpen: false,
         associationFilter: '',
         dataInicio: '',
         dataFim: '',

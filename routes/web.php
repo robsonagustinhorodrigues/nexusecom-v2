@@ -115,8 +115,61 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/admin/configuracoes', function () {
         return view('admin.configuracoes-alpine');
     })->name('admin.configuracoes');
-    Route::get('/admin/avisos', \App\Livewire\Admin\Avisos::class)->name('admin.avisos');
-    Route::get('/admin/tarefas', \App\Livewire\Admin\Tarefas::class)->name('admin.tarefas');
+    
+    // Novas rotas Alpine
+    Route::get('/admin/avisos', function () {
+        return view('admin.avisos-alpine');
+    })->name('admin.avisos');
+
+    Route::get('/admin/tarefas', function () {
+        return view('admin.tarefas-alpine');
+    })->name('admin.tarefas');
+
+    // API Routes for Avisos e Tarefas
+    Route::get('/api/admin/notificacoes', function () {
+        $notificacoes = \App\Models\Notificacao::where('user_id', auth()->id())
+            ->orderBy('created_at', 'desc')
+            ->limit(50)
+            ->get();
+        return response()->json(['notificacoes' => $notificacoes]);
+    });
+
+    Route::post('/api/admin/notificacoes/marcar-lida', function () {
+        \App\Models\Notificacao::where('user_id', auth()->id())->update(['read' => true]);
+        return response()->json(['success' => true]);
+    });
+
+    Route::delete('/api/admin/notificacoes/{id}', function ($id) {
+        \App\Models\Notificacao::findOrFail($id)->delete();
+        return response()->json(['success' => true]);
+    });
+
+    Route::delete('/api/admin/notificacoes/limpar', function () {
+        \App\Models\Notificacao::where('user_id', auth()->id())->delete();
+        return response()->json(['success' => true]);
+    });
+
+    Route::get('/api/admin/tarefas', function () {
+        $tarefas = \App\Models\Tarefa::with('empresa')
+            ->orderBy('created_at', 'desc')
+            ->limit(50)
+            ->get();
+
+        $stats = [
+            'total' => $tarefas->count(),
+            'processando' => $tarefas->where('status', 'processando')->count(),
+            'concluido' => $tarefas->where('status', 'concluido')->count(),
+            'erro' => $tarefas->where('status', 'erro')->count(),
+        ];
+
+        return response()->json(['tarefas' => $tarefas, 'stats' => $stats]);
+    });
+
+    Route::delete('/api/admin/tarefas/limpar', function () {
+        \App\Models\Tarefa::where('status', 'concluido')->delete();
+        return response()->json(['success' => true]);
+    });
+    
     Route::get('/roadmap', function () {
         $phases = (new \App\Livewire\Admin\Roadmap)->phases;
 

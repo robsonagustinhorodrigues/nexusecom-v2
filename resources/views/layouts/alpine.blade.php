@@ -49,6 +49,8 @@
                         ['route' => 'admin.empresas', 'icon' => 'fa-building', 'label' => 'Empresas'],
                         ['route' => 'admin.depositos', 'icon' => 'fa-boxes-packing', 'label' => 'Depósitos'],
                         ['route' => 'admin.usuarios', 'icon' => 'fa-users', 'label' => 'Usuários'],
+                        ['route' => 'admin.avisos', 'icon' => 'fa-bell', 'label' => 'Avisos'],
+                        ['route' => 'admin.tarefas', 'icon' => 'fa-tasks', 'label' => 'Tarefas'],
                         ['route' => 'admin.configuracoes', 'icon' => 'fa-cog', 'label' => 'Configurações'],
                         ['route' => 'roadmap', 'icon' => 'fa-map', 'label' => 'Roadmap'],
                     ];
