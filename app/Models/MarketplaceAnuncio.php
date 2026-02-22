@@ -51,6 +51,11 @@ class MarketplaceAnuncio extends Model
         return $this->belongsTo(Integracao::class);
     }
 
+    public function product(): BelongsTo
+    {
+        return $this->belongsTo(Product::class, 'produto_id');
+    }
+
     public function productSku(): BelongsTo
     {
         return $this->belongsTo(ProductSku::class, 'product_sku_id');
@@ -94,6 +99,7 @@ class MarketplaceAnuncio extends Model
     {
         return $this->hasOne(AnuncioEstoqueVirtual::class, 'anuncio_id');
     }
+
     public function repricerConfig()
     {
         return $this->hasOne(AnuncioRepricerConfig::class, 'marketplace_anuncio_id');

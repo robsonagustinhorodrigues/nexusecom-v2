@@ -163,7 +163,7 @@ class BlingController extends Controller
 
     public function testConnection()
     {
-        $empresaId = Auth::user()->current_empresa_id;
+        $empresaId = session('empresa_id', 6);
         $blingService = new BlingIntegrationService($empresaId);
 
         if (! $blingService->isConnected()) {

@@ -1,55 +1,16 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Editar Produto - NexusEcom</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-        body { font-family: 'Inter', sans-serif; }
-    </style>
-</head>
-<body class="bg-slate-900 text-white" x-data="productEdit()" x-init="init()">
+@extends('layouts.alpine')
 
-    <!-- Header -->
-    <header class="fixed top-0 left-0 right-0 h-14 bg-slate-900/95 backdrop-blur border-b border-slate-800 z-50 flex items-center justify-between px-4">
-        <div class="flex items-center gap-4">
-            <form method="POST" action="{{ route('logout') }}">
-                @csrf
-                <button type="submit" class="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-red-400" title="Sair">
-                    <i class="fas fa-sign-out-alt"></i>
-                </button>
-            </form>
-            <a href="/products-list" class="p-2 hover:bg-slate-800 rounded-lg">
-            <!-- User Dropdown -->
-            <div class="relative" x-data="{ open: false }">
-                <button @click="open = !open" class="flex items-center gap-2 pl-3 border-l border-slate-700 pr-2 py-1 rounded-lg hover:bg-slate-800 transition">
-                    <div class="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-sm font-bold">R</div>
-                    <i class="fas fa-chevron-down text-xs text-slate-400"></i>
-                </button>
-                <div x-show="open" @click.away="open = false" x-transition class="absolute right-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-lg py-1 z-50">
-                    <div class="px-4 py-2 border-b border-slate-700">
-                        <p class="text-sm font-medium text-white">Robson</p>
-                        <p class="text-xs text-slate-400">robson@email.com</p>
-                    </div>
-                    <form method="POST" action="{{ route('logout') }}">
-                        @csrf
-                        <button type="submit" class="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-red-400 flex items-center gap-2">
-                            <i class="fas fa-sign-out-alt"></i> Sair
-                        </button>
-                    </form>
-                </div>
-            </div>
-                <i class="fas fa-arrow-left"></i>
-            </a>
-            <h1 class="font-bold text-lg">
-                <span x-show="!loading">Editar Produto</span>
-                <span x-show="loading">Carregando...</span>
-            </h1>
-        </div>
+@section('title', 'Editar Produto - NexusEcom')
+@section('header_title', 'Editar Produto')
+
+@section('content')
+<div x-data="productEdit()" x-init="init()" class="max-w-4xl mx-auto">
+    <!-- Botão Voltar e Salvar -->
+    <div class="flex items-center justify-between mb-6">
+        <a href="/products" class="flex items-center gap-2 text-slate-400 hover:text-white transition">
+            <i class="fas fa-arrow-left"></i>
+            <span>Voltar para Lista</span>
+        </a>
         <button 
             @click="save()" 
             :disabled="saving"
@@ -58,11 +19,7 @@
             <i x-show="saving" class="fas fa-spinner fa-spin"></i>
             <span x-text="saving ? 'Salvando...' : 'Salvar'"></span>
         </button>
-    </header>
-
-    <!-- Main -->
-    <main class="pt-14 min-h-screen pb-20">
-        <div class="p-6 max-w-4xl mx-auto">
+    </div>
             
             <!-- Success/Error Messages -->
             <div x-show="successMessage" x-transition class="mb-4 p-4 bg-emerald-500/20 border border-emerald-500/50 rounded-lg text-emerald-400">
@@ -157,6 +114,59 @@
                     </div>
                 </div>
 
+                <!-- Photos -->
+                <div class="bg-slate-800 rounded-xl border border-slate-700 p-6">
+                    <h2 class="font-bold mb-4 flex items-center gap-2">
+                        <i class="fas fa-images text-rose-400"></i> Fotos do Produto
+                    </h2>
+                    
+                    <!-- Foto Principal -->
+                    <div class="mb-4">
+                        <label class="block text-sm text-slate-400 mb-2">Foto Principal</label>
+                        <div class="flex items-center gap-4">
+                            <div class="w-24 h-24 rounded-xl bg-slate-700 border-2 border-dashed border-slate-600 flex items-center justify-center overflow-hidden">
+                                <img x-show="product.foto_principal" :src="product.foto_principal" class="w-full h-full object-cover">
+                                <i x-show="!product.foto_principal" class="fas fa-image text-2xl text-slate-500"></i>
+                            </div>
+                            <div class="flex-1">
+                                <input type="text" x-model="product.foto_principal" placeholder="URL da imagem..." 
+                                    class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+                                <p class="text-xs text-slate-500 mt-1">Cole a URL da imagem ou faça upload</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Galeria de Fotos -->
+                    <div>
+                        <label class="block text-sm text-slate-400 mb-2">Fotos Adicionais</label>
+                        <div class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                            <!-- Adicionar foto -->
+                            <label class="aspect-square rounded-xl border-2 border-dashed border-slate-600 flex flex-col items-center justify-center text-slate-500 hover:border-indigo-500 hover:text-indigo-500 cursor-pointer transition-all">
+                                <i class="fas fa-plus text-xl mb-1"></i>
+                                <span class="text-xs font-medium">Adicionar</span>
+                                <input type="text" @change="addGalleryPhoto($event)" placeholder="URL..." class="absolute opacity-0 w-full h-full cursor-pointer">
+                            </label>
+                            
+                            <!-- Fotos existentes -->
+                            <template x-for="(photo, index) in product.fotos_galeria" :key="index">
+                                <div class="aspect-square rounded-xl bg-slate-700 border border-slate-600 relative group overflow-hidden">
+                                    <img :src="photo" class="w-full h-full object-cover">
+                                    <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                        <button @click="removeGalleryPhoto(index)" class="p-2 bg-red-500/20 rounded-lg text-red-400 hover:bg-red-500/30" title="Excluir">
+                                            <i class="fas fa-trash text-xs"></i>
+                                        </button>
+                                    </div>
+                                    <!-- Drag handle for reordering -->
+                                    <div class="absolute bottom-1 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 cursor-move">
+                                        <i class="fas fa-grip-lines text-white/50 text-xs"></i>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                        <p class="text-xs text-slate-500 mt-2">Arraste para reordenar. Clique no X para remover.</p>
+                    </div>
+                </div>
+
                 <!-- Pricing -->
                 <div class="bg-slate-800 rounded-xl border border-slate-700 p-6">
                     <h2 class="font-bold mb-4 flex items-center gap-2">
@@ -192,7 +202,7 @@
                             <label class="block text-sm text-slate-400 mb-1">Custo Total</label>
                             <div class="relative">
                                 <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">R$</span>
-                                <input type="text" :value="formatMoney((parseFloat(product.preco_custo) || 0) + (parseFloat(product.custo_adicional) || 0))" class="w-full bg-slate-800 border border-slate-600 rounded-lg pl-10 pr-4 py-2 text-slate-400" readonly>
+                                <input type="text" x-model="custoTotalDisplay" class="w-full bg-slate-800 border border-slate-600 rounded-lg pl-10 pr-4 py-2 text-white font-medium" readonly>
                             </div>
                         </div>
                     </div>
@@ -395,6 +405,7 @@
             saving: false,
             successMessage: '',
             errorMessage: '',
+            custoTotalDisplay: 'R$ 0,00',
             
             product: {
                 nome: '',
@@ -417,6 +428,8 @@
                 cest: '',
                 origem: '0',
                 ativo: true,
+                foto_principal: '',
+                fotos_galeria: [],
             },
             
             variations: [],
@@ -436,11 +449,20 @@
                 
                 this.loadCategorias();
                 
+                // Watch for custo changes
+                this.$watch('product.preco_custo', () => this.updateCustoTotal());
+                this.$watch('product.custo_adicional', () => this.updateCustoTotal());
+                
                 if (this.productId) {
                     this.loadProduct();
                 } else {
                     this.loading = false;
                 }
+            },
+            
+            updateCustoTotal() {
+                const custo = (parseFloat(this.product.preco_custo) || 0) + (parseFloat(this.product.custo_adicional) || 0);
+                this.custoTotalDisplay = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(custo);
             },
             
             async loadCategorias() {
@@ -478,7 +500,12 @@
                         cest: data.cest || '',
                         origem: data.origem || '0',
                         ativo: data.ativo !== false,
+                        foto_principal: data.foto_principal || '',
+                        fotos_galeria: data.fotos_galeria || [],
                     };
+                    
+                    // Update custo total display
+                    this.updateCustoTotal();
                     
                     // Load variations (as child products)
                     if (data.variations) {
@@ -598,7 +625,7 @@
                     if (data.success) {
                         this.successMessage = data.message;
                         setTimeout(() => {
-                            window.location.href = '/products-list';
+                            window.location.href = '/products';
                         }, 1500);
                     } else {
                         this.errorMessage = data.message || 'Erro ao salvar';
@@ -610,9 +637,25 @@
                 }
                 
                 this.saving = false;
+            },
+            
+            // Photo functions
+            addGalleryPhoto(event) {
+                const url = event.target.value;
+                if (url && url.trim()) {
+                    this.product.fotos_galeria.push(url.trim());
+                    event.target.value = '';
+                }
+            },
+            
+            removeGalleryPhoto(index) {
+                this.product.fotos_galeria.splice(index, 1);
+            },
+            
+            formatMoney(value) {
+                return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
             }
         }
     }
     </script>
-</body>
-</html>
+@endsection

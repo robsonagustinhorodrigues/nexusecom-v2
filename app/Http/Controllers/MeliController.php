@@ -101,7 +101,7 @@ class MeliController extends Controller
 
     public function testConnection()
     {
-        $empresaId = Auth::user()->current_empresa_id;
+        $empresaId = session('empresa_id', 6);
         $meliService = new \App\Services\MeliIntegrationService($empresaId);
 
         if (! $meliService->isConnected()) {
@@ -110,23 +110,9 @@ class MeliController extends Controller
 
         try {
             return response()->json([
-                'success' => true, 
-                'message' => 'Conexão OK!',
-                'data' => ['status' => 'connected']
-            ]);
-        } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => 'Erro: ' . $e->getMessage()]);
-        }
-    }
-}
-
-        try {
-            $user = $meliService->getUser();
-
-            return response()->json([
                 'success' => true,
                 'message' => 'Conexão OK!',
-                'data' => $user,
+                'data' => ['status' => 'connected'],
             ]);
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => 'Erro: '.$e->getMessage()]);

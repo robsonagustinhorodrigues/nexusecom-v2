@@ -232,8 +232,8 @@
                                 <span class="absolute left-3 top-2 text-gray-500">R$</span>
                                 <input 
                                     type="text"
-                                    :value="formatMoney((parseFloat(product.preco_custo) || 0) + (parseFloat(product.custo_adicional) || 0))"
-                                    class="w-full pl-8 pr-4 py-2 border border-gray-200 rounded-lg bg-gray-100 text-gray-600"
+                                    x-text="formatMoney((parseFloat(product.preco_custo) || 0) + (parseFloat(product.custo_adicional) || 0))"
+                                    class="w-full pl-8 pr-4 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-900 font-medium"
                                     readonly
                                 >
                             </div>

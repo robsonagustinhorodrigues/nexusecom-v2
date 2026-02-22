@@ -16,6 +16,8 @@
         <form action="/integrations/amazon/connect" method="POST" class="space-y-4">
             @csrf
             
+            <input type="hidden" name="marketplace_id" value="ATVPDKIKX0DER">
+            
             <div>
                 <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Client ID</label>
                 <input type="text" name="client_id" required class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none">
@@ -36,9 +38,11 @@
                 <input type="text" name="seller_id" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none">
             </div>
             
-            <div>
-                <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Marketplace ID (opcional)</label>
-                <input type="text" name="marketplace_id" placeholder="ATVPDKIKX0DER" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none">
+            <div class="p-3 bg-slate-700/50 rounded-xl border border-slate-600">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-globe text-slate-400"></i>
+                    <span class="text-sm text-slate-400">Marketplace: <span class="text-white font-bold">Brasil (ATVPDKIKX0DER)</span></span>
+                </div>
             </div>
             
             <div>

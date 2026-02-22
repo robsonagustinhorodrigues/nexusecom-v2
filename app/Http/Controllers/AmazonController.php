@@ -124,7 +124,7 @@ class AmazonController extends Controller
 
     public function testConnection()
     {
-        $empresaId = Auth::user()->current_empresa_id;
+        $empresaId = session('empresa_id', 6);
         $amazonService = new AmazonIntegrationService($empresaId);
 
         if (! $amazonService->isConnected()) {

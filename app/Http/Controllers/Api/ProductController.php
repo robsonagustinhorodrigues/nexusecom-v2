@@ -184,6 +184,8 @@ class ProductController extends Controller
             'profundidade' => $request->profundidade ?? 0,
             'estoque' => $request->estoque ?? 0,
             'ativo' => $request->ativo ?? true,
+            'foto_principal' => $request->foto_principal ?? '',
+            'fotos_galeria' => $request->fotos_galeria ?? [],
         ]);
 
         if ($validated['tipo'] === 'composto') {

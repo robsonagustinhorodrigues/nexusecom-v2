@@ -16,6 +16,10 @@ Route::get('/login', function () {
     return view('auth.login-simple');
 })->middleware('guest');
 
+Route::get('/login-simple', function () {
+    return view('auth.login-simple');
+})->middleware('guest');
+
 Route::post('/login', function (\Illuminate\Http\Request $request) {
     $credentials = $request->validate([
         'email' => 'required|email',
@@ -52,6 +56,10 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/products/edit', function () {
         return view('products.edit-alpine');
     })->name('products.edit');
+
+    Route::get('/products/edit/{id}', function ($id) {
+        return view('products.edit-alpine', ['id' => $id]);
+    })->name('products.edit.id');
 
     // Orders
     Route::get('/orders', function () {
@@ -194,6 +202,10 @@ Route::prefix('api')->middleware('auth')->group(function () {
     Route::get('/anuncios/{id}', [App\Http\Controllers\Api\AnuncioController::class, 'show']);
     Route::put('/anuncios/{id}', [App\Http\Controllers\Api\AnuncioController::class, 'update']);
     Route::post('/anuncios/sync', [App\Http\Controllers\Api\AnuncioController::class, 'sync']);
+    Route::post('/anuncios/{id}/vincular', [App\Http\Controllers\Api\AnuncioController::class, 'vincular']);
+    Route::get('/anuncios/{id}/repricer', [App\Http\Controllers\Api\AnuncioController::class, 'getRepricerConfig']);
+    Route::post('/anuncios/{id}/repricer', [App\Http\Controllers\Api\AnuncioController::class, 'saveRepricerConfig']);
+    Route::post('/anuncios/{id}/importar', [App\Http\Controllers\Api\AnuncioController::class, 'importAsProduct']);
 
     Route::get('/orders', [App\Http\Controllers\Api\OrderController::class, 'index']);
     Route::get('/orders/{id}', [App\Http\Controllers\Api\OrderController::class, 'show']);
