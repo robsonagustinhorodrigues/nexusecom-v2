@@ -184,11 +184,20 @@ function integrationsPage() {
         
         init() {
             this.loadIntegrations();
+            
+            // Listen for empresa changes from the layout
+            window.addEventListener('empresa-changed', (e) => {
+                this.loadIntegrations(e.detail);
+            });
         },
         
-        async loadIntegrations() {
+        async loadIntegrations(empresaId = null) {
+            if (!empresaId) {
+                empresaId = localStorage.getItem('empresa_id') || '6';
+            }
+            
             try {
-                const response = await fetch('/api/admin/integrations');
+                const response = await fetch(`/admin/integrations?empresa=${empresaId}`);
                 this.integrations = await response.json();
                 
                 this.meliIntegration = this.integrations.find(i => i.marketplace === 'mercadolivre');
@@ -201,8 +210,9 @@ function integrationsPage() {
         
         async testConnection(type) {
             this.testing = true;
+            const empresaId = localStorage.getItem('empresa_id') || '6';
             try {
-                const response = await fetch(`/integrations/${type}/test`, { 
+                const response = await fetch(`/integrations/${type}/test?empresa=${empresaId}`, { 
                     method: 'POST',
                     headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
                 });

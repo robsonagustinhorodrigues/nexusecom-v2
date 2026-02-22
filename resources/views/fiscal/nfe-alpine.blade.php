@@ -32,57 +32,68 @@
                 <option value="inutilizada">Inutilizada</option>
             </select>
 
-            <!-- Dropdown de Importação -->
+            <!-- Botão de Funções (Dropdown) -->
             <div class="relative" x-data="{ importMenu: false }">
-                <button @click="importMenu = !importMenu" :disabled="importing" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl font-black italic uppercase text-xs transition-all flex items-center gap-2">
-                    <i class="fas fa-plus" :class="importing ? 'animate-bounce' : ''"></i>
-                    <span x-text="importing ? 'Importando...' : 'Importar'"></span>
-                    <i class="fas fa-chevron-down text-[10px]"></i>
+                <button @click="importMenu = !importMenu" :disabled="importing" 
+                        class="w-10 h-10 bg-slate-700 hover:bg-slate-600 border border-slate-600 text-white rounded-xl transition-all flex items-center justify-center shadow-lg"
+                        title="Funções e Importações">
+                    <i class="fas fa-ellipsis-v" :class="importing || loading ? 'animate-spin' : ''"></i>
                 </button>
                 
                 <!-- Dropdown Menu -->
                 <div x-show="importMenu" @click.away="importMenu = false" x-cloak
-                     class="absolute right-0 mt-2 w-64 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl z-50 overflow-hidden">
+                     class="absolute right-0 mt-2 w-72 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl z-50 overflow-hidden">
                     <div class="p-2">
-                        <p class="text-[10px] font-black text-slate-500 uppercase px-3 py-2">Fontes de Dados</p>
-                        <button @click="importMenu = false; importFromMeli()" 
+                        <p class="text-[10px] font-black text-slate-500 uppercase px-3 py-2">Processamento</p>
+                        
+                        <button @click="importMenu = false; reprocessSelected()" :disabled="selected.length === 0"
+                                class="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-left hover:bg-slate-700/50 transition-colors disabled:opacity-30">
+                            <div class="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                                <i class="fas fa-sync text-amber-400 text-sm"></i>
+                            </div>
+                            <div>
+                                <p class="text-xs font-bold text-white">Reprocessar Associação</p>
+                                <p class="text-[10px] text-slate-500" x-text="selected.length > 0 ? 'Reprocessar ' + selected.length + ' notas' : 'Selecione notas para reprocessar'"></p>
+                            </div>
+                        </button>
+
+                        <div class="h-px bg-slate-700/50 my-1 mx-2"></div>
+                        
+                        <p class="text-[10px] font-black text-slate-500 uppercase px-3 py-2">Importação (Fila)</p>
+                        
+                        <button @click="importMenu = false; showImportMeli = true; meliDataInicio = dataInicio; meliDataFim = dataFim" 
                                 class="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-left hover:bg-slate-700/50 transition-colors">
                             <div class="w-8 h-8 rounded-lg bg-yellow-500/20 flex items-center justify-center">
-                                <i class="fab fa-mercury text-yellow-400 text-sm"></i>
+                                <i class="fab fa-mercadolivre text-yellow-400 text-sm"></i>
                             </div>
                             <div>
                                 <p class="text-xs font-bold text-white">Mercado Livre</p>
                                 <p class="text-[10px] text-slate-500">Importar NF-es por data</p>
                             </div>
                         </button>
-                        <button @click="importMenu = false; importFromSefaz()" 
+
+                        <button @click="importMenu = false; canSearchSefaz ? importFromSefaz() : null" 
+                                :class="!canSearchSefaz ? 'opacity-30 cursor-not-allowed' : ''"
                                 class="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-left hover:bg-slate-700/50 transition-colors">
                             <div class="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
                                 <i class="fas fa-file-invoice-dollar text-blue-400 text-sm"></i>
                             </div>
                             <div>
-                                <p class="text-xs font-bold text-white">SEFAZ</p>
-                                <p class="text-[10px] text-slate-500">Buscar notasEmitidas pela SEFAZ</p>
+                                <p class="text-xs font-bold text-white">Buscar NF-e SEFAZ</p>
+                                <p class="text-[10px] text-slate-500" x-text="canSearchSefaz ? 'Consultar novos NSUs' : 'Aguarde: ' + sefazCountdown"></p>
                             </div>
                         </button>
-                        <button @click="importMenu = false; importXml()" 
+
+                        <div class="h-px bg-slate-700/50 my-1 mx-2"></div>
+
+                        <button @click="importMenu = false; showImportXml = true" 
                                 class="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-left hover:bg-slate-700/50 transition-colors">
                             <div class="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
                                 <i class="fas fa-file-code text-emerald-400 text-sm"></i>
                             </div>
                             <div>
                                 <p class="text-xs font-bold text-white">XML / ZIP</p>
-                                <p class="text-[10px] text-slate-500">Importar XML ou arquivo compactado</p>
-                            </div>
-                        </button>
-                        <button @click="importMenu = false; importFromBling()" 
-                                class="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-left hover:bg-slate-700/50 transition-colors">
-                            <div class="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
-                                <i class="fas fa-box text-orange-400 text-sm"></i>
-                            </div>
-                            <div>
-                                <p class="text-xs font-bold text-white">Bling</p>
-                                <p class="text-[10px] text-slate-500">Importar notas do Bling</p>
+                                <p class="text-[10px] text-slate-500">Importar manual</p>
                             </div>
                         </button>
                     </div>
@@ -93,12 +104,22 @@
 
     <!-- Grid de Métricas -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <div class="bg-slate-800 border border-slate-700 rounded-3xl p-6 shadow-xl group hover:border-indigo-500/30 transition-all">
-            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Total de Notas</p>
-            <h3 class="text-2xl font-black text-white italic" x-text="nfe.length">0</h3>
-            <div class="mt-4 flex items-center gap-2">
-                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-tight" x-text="view === 'recebidas' ? 'Entradas no Período' : 'Saídas no Período'"></span>
+        <div class="bg-slate-800 border border-slate-700 rounded-3xl p-6 shadow-xl group hover:border-indigo-500/30 transition-all relative overflow-hidden">
+            <div class="relative z-10">
+                <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Status SEFAZ</p>
+                <div class="flex items-baseline gap-2">
+                    <h3 class="text-xl font-black text-white italic" x-text="empresaStats.last_nsu || '0'">0</h3>
+                    <span class="text-[10px] text-slate-500 font-bold uppercase italic">NSU</span>
+                </div>
+                <div class="mt-4 flex flex-col gap-1">
+                    <div class="flex items-center gap-2">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Última Consulta:</span>
+                    </div>
+                    <span class="text-[10px] text-indigo-400 font-black italic" x-text="empresaStats.last_sefaz_at || 'Nunca consultado'"></span>
+                </div>
             </div>
+            <i class="fas fa-satellite-dish absolute -right-4 -bottom-4 text-6xl text-slate-700/20 group-hover:text-indigo-500/10 transition-colors"></i>
         </div>
 
         <div class="bg-slate-800 border border-slate-700 rounded-3xl p-6 shadow-xl group hover:border-emerald-500/30 transition-all">
@@ -142,46 +163,6 @@
                         <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 text-xs"></i>
                         <input type="text" x-model="search" @input.debounce.300ms="currentPage = 1; loadNfe()" placeholder="Buscar..." 
                                class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-4 py-2 text-xs font-bold italic text-white focus:border-indigo-500 outline-none">
-                    </div>
-                    <button @click="reprocessSelected()" :disabled="selected.length === 0"
-                            class="px-3 py-2 bg-amber-600 hover:bg-amber-500 rounded-xl text-xs font-bold italic text-white flex items-center gap-2 disabled:opacity-50">
-                        <i class="fas fa-sync"></i>
-                    </button>
-                    
-                    <!-- Import Dropdown -->
-                    <div class="relative" x-data="{ open: false }">
-                        <button @click="open = !open" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold italic text-white flex items-center gap-2">
-                            <i class="fas fa-download"></i>
-                            <span class="hidden md:inline">Importar</span>
-                            <i class="fas fa-chevron-down text-[10px]"></i>
-                        </button>
-                        <div x-show="open" @click.away="open = false" x-transition x-cloak 
-                             class="absolute right-0 mt-2 w-56 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl z-50 py-2">
-                            <button @click="showImportMeli = true; open = false" 
-                                    class="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white flex items-center gap-3">
-                                <i class="fab fa-mercadolivre text-rose-400"></i>
-                                <div>
-                                    <div class="font-bold">Mercado Livre</div>
-                                    <div class="text-[10px] text-slate-500">Importar por data</div>
-                                </div>
-                            </button>
-                            <button @click="showImportXml = true; open = false" 
-                                    class="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white flex items-center gap-3">
-                                <i class="fas fa-file-code text-indigo-400"></i>
-                                <div>
-                                    <div class="font-bold">XML</div>
-                                    <div class="text-[10px] text-slate-500">Importar arquivo XML</div>
-                                </div>
-                            </button>
-                            <button @click="showImportZip = true; open = false" 
-                                    class="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white flex items-center gap-3">
-                                <i class="fas fa-file-archive text-amber-400"></i>
-                                <div>
-                                    <div class="font-bold">ZIP</div>
-                                    <div class="text-[10px] text-slate-500">Importar arquivo ZIP</div>
-                                </div>
-                            </button>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -321,12 +302,21 @@ function fiscalPage() {
         dataFim: '',
         search: '',
         showImportMeli: false,
+        showImportBling: false,
         showImportXml: false,
         showImportZip: false,
         importLoading: false,
         importResult: null,
         meliDataInicio: '',
         meliDataFim: '',
+        blingDataInicio: '',
+        blingDataFim: '',
+        sefazCountdown: '',
+        canSearchSefaz: true,
+        empresaStats: {
+            last_nsu: 0,
+            last_sefaz_at: null
+        },
         nfe: [],
         selected: [],
         loading: false,
@@ -394,11 +384,65 @@ function fiscalPage() {
                     this.total = data.total || 0;
                     this.from = data.from || 0;
                     this.to = data.to || 0;
+                    
+                    // Atualizar stats da empresa se vierem na resposta ou buscar separado
+                    if (data.empresa_stats) {
+                        this.empresaStats = data.empresa_stats;
+                        this.updateSefazTimer();
+                    } else {
+                        this.loadEmpresaStats();
+                    }
                 }
             } catch (e) {
                 console.error('Erro ao carregar NF-e:', e);
             }
             this.loading = false;
+        },
+
+        updateSefazTimer() {
+            if (!this.empresaStats.last_sefaz_at || this.empresaStats.last_sefaz_at === 'Nunca') {
+                this.canSearchSefaz = true;
+                return;
+            }
+
+            // Converter data string (d/m/Y H:i:s) para Date
+            const [datePart, timePart] = this.empresaStats.last_sefaz_at.split(' ');
+            const [d, m, y] = datePart.split('/');
+            const [h, i, s] = timePart.split(':');
+            const lastSefaz = new Date(y, m - 1, d, h, i, s);
+            
+            const now = new Date();
+            const diffMs = now - lastSefaz;
+            const hourInMs = 60 * 60 * 1000;
+
+            if (diffMs < hourInMs) {
+                this.canSearchSefaz = false;
+                const remainingMs = hourInMs - diffMs;
+                const minutes = Math.floor(remainingMs / 60000);
+                const seconds = Math.floor((remainingMs % 60000) / 1000);
+                this.sefazCountdown = `${minutes}m ${seconds}s`;
+                
+                // Atualizar a cada segundo
+                setTimeout(() => this.updateSefazTimer(), 1000);
+            } else {
+                this.canSearchSefaz = true;
+                this.sefazCountdown = '';
+            }
+        },
+
+        async loadEmpresaStats() {
+            try {
+                const empresaId = localStorage.getItem('empresa_id') || '4';
+                const response = await fetch(`/api/admin/empresas/${empresaId}`);
+                if (response.ok) {
+                    const empresa = await response.json();
+                    this.empresaStats = {
+                        last_nsu: empresa.last_nsu || 0,
+                        last_sefaz_at: empresa.updated_at ? this.formatDateTime(empresa.updated_at) : 'Nunca'
+                    };
+                    this.updateSefazTimer();
+                }
+            } catch (e) {}
         },
         
         async importNfe() {
@@ -441,8 +485,43 @@ function fiscalPage() {
                 });
                 
                 if (response.ok) {
+                    const result = await response.json();
                     await this.loadNfe();
-                    alert('Sincronização com SEFAZ concluída! ⚡');
+                    
+                    // Alert estilizado usando SweetAlert2 (se disponível)
+                    if (window.Swal) {
+                        Swal.fire({
+                            title: 'Busca SEFAZ Concluída! ⚡',
+                            html: `
+                                <div class="text-left space-y-2 text-slate-300 py-2">
+                                    <div class="flex justify-between items-center bg-slate-900/50 p-2 rounded-lg mb-1">
+                                        <span class="text-xs font-bold uppercase text-slate-500">NSU Inicial:</span> 
+                                        <span class="font-mono font-bold text-white">${result.nsu_inicial}</span>
+                                    </div>
+                                    <div class="flex justify-between items-center bg-slate-900/50 p-2 rounded-lg mb-3">
+                                        <span class="text-xs font-bold uppercase text-slate-500">NSU Final:</span> 
+                                        <span class="font-mono font-bold text-indigo-400">${result.nsu_final}</span>
+                                    </div>
+                                    <div class="h-px bg-slate-700 my-4"></div>
+                                    <div class="flex justify-between items-center p-2">
+                                        <span class="font-black uppercase italic text-slate-400">Notas Recebidas:</span> 
+                                        <span class="text-2xl font-black text-emerald-400 italic">${result.qtd_notas}</span>
+                                    </div>
+                                </div>
+                            `,
+                            icon: 'success',
+                            background: '#1e293b',
+                            color: '#fff',
+                            confirmButtonColor: '#4f46e5',
+                            confirmButtonText: 'ENTENDIDO',
+                            customClass: {
+                                popup: 'rounded-3xl border border-slate-700 shadow-2xl',
+                                title: 'italic font-black uppercase text-xl tracking-tighter'
+                            }
+                        });
+                    } else {
+                        alert(`Busca SEFAZ Concluída!\n\nNSU: ${result.nsu_inicial} -> ${result.nsu_final}\nNotas: ${result.qtd_notas}`);
+                    }
                 } else {
                     const error = await response.json();
                     alert('Erro na sincronização: ' + (error.message || 'Erro desconhecido'));
@@ -455,11 +534,21 @@ function fiscalPage() {
         },
         
         async importFromMeli() {
-            const dataInicio = prompt('Data inicial (YYYY-MM-DD):', this.dataInicio);
-            if (!dataInicio) return;
-            
-            const dataFim = prompt('Data final (YYYY-MM-DD):', this.dataFim);
-            if (!dataFim) return;
+            if (!this.meliDataInicio || !this.meliDataFim) {
+                if (window.Swal) {
+                    Swal.fire({
+                        title: 'Atenção!',
+                        text: 'Selecione as datas inicial e final para continuar.',
+                        icon: 'warning',
+                        background: '#1e293b',
+                        color: '#fff',
+                        confirmButtonColor: '#4f46e5'
+                    });
+                } else {
+                    alert('Selecione as datas inicial e final');
+                }
+                return;
+            }
             
             this.importing = true;
             try {
@@ -472,19 +561,52 @@ function fiscalPage() {
                     },
                     body: JSON.stringify({
                         empresa_id: empresaId,
-                        data_inicio: dataInicio,
-                        data_fim: dataFim
+                        data_inicio: this.meliDataInicio,
+                        data_fim: this.meliDataFim
                     })
                 });
                 
                 const result = await response.json();
                 
                 if (response.ok) {
-                    alert(`Importação iniciada! Job ID: ${result.job_id || 'N/A'}\nNotas serão processadas em background.`);
-                    // Redirect to tarefas page
-                    window.location.href = '/admin/tarefas';
+                    this.showImportMeli = false;
+                    
+                    if (window.Swal) {
+                        Swal.fire({
+                            title: 'Importação Iniciada! 🚀',
+                            text: 'As notas do Mercado Livre estão sendo processadas em background. Acompanhe na aba de tarefas.',
+                            icon: 'info',
+                            background: '#1e293b',
+                            color: '#fff',
+                            confirmButtonColor: '#4f46e5',
+                            confirmButtonText: 'VER TAREFAS',
+                            showCancelButton: true,
+                            cancelButtonText: 'FECHAR',
+                            customClass: {
+                                popup: 'rounded-3xl border border-slate-700 shadow-2xl',
+                                title: 'italic font-black uppercase tracking-tighter'
+                            }
+                        }).then((result) => {
+                            if (result.isConfirmed) {
+                                window.location.href = '/admin/tarefas';
+                            }
+                        });
+                    } else {
+                        alert(`Importação iniciada!\nNotas serão processadas em background.`);
+                        window.location.href = '/admin/tarefas';
+                    }
                 } else {
-                    alert('Erro: ' + (result.message || 'Erro desconhecido'));
+                    if (window.Swal) {
+                        Swal.fire({
+                            title: 'Erro!',
+                            text: result.message || 'Erro desconhecido ao importar.',
+                            icon: 'error',
+                            background: '#1e293b',
+                            color: '#fff'
+                        });
+                    } else {
+                        alert('Erro: ' + (result.message || 'Erro desconhecido'));
+                    }
                 }
             } catch (e) {
                 console.error('Erro:', e);
@@ -529,11 +651,10 @@ function fiscalPage() {
         },
         
         async importFromBling() {
-            const dataInicio = prompt('Data inicial (YYYY-MM-DD):', this.dataInicio);
-            if (!dataInicio) return;
-            
-            const dataFim = prompt('Data final (YYYY-MM-DD):', this.dataFim);
-            if (!dataFim) return;
+            if (!this.blingDataInicio || !this.blingDataFim) {
+                alert('Selecione as datas inicial e final');
+                return;
+            }
             
             this.importing = true;
             try {
@@ -546,16 +667,40 @@ function fiscalPage() {
                     },
                     body: JSON.stringify({
                         empresa_id: empresaId,
-                        data_inicio: dataInicio,
-                        data_fim: dataFim
+                        data_inicio: this.blingDataInicio,
+                        data_fim: this.blingDataFim
                     })
                 });
                 
                 const result = await response.json();
                 
                 if (response.ok) {
-                    alert(`Importação iniciada! \nNotas serão processadas em background.`);
-                    window.location.href = '/admin/tarefas';
+                    this.showImportBling = false;
+                    
+                    if (window.Swal) {
+                        Swal.fire({
+                            title: 'Importação do Bling! 📦',
+                            text: 'As notas estão sendo importadas em background. Acompanhe na aba de tarefas.',
+                            icon: 'success',
+                            background: '#1e293b',
+                            color: '#fff',
+                            confirmButtonColor: '#f97316',
+                            confirmButtonText: 'VER TAREFAS',
+                            showCancelButton: true,
+                            cancelButtonText: 'FECHAR',
+                            customClass: {
+                                popup: 'rounded-3xl border border-slate-700 shadow-2xl',
+                                title: 'italic font-black uppercase tracking-tighter'
+                            }
+                        }).then((result) => {
+                            if (result.isConfirmed) {
+                                window.location.href = '/admin/tarefas';
+                            }
+                        });
+                    } else {
+                        alert(`Importação do Bling iniciada!\nAs notas serão processadas em background.`);
+                        window.location.href = '/admin/tarefas';
+                    }
                 } else {
                     alert('Erro: ' + (result.message || 'Erro desconhecido'));
                 }
@@ -631,6 +776,11 @@ function fiscalPage() {
         formatDate(date) {
             if (!date) return '-';
             return new Date(date).toLocaleDateString('pt-BR');
+        },
+
+        formatDateTime(date) {
+            if (!date) return '-';
+            return new Date(date).toLocaleString('pt-BR');
         },
         
         formatMoney(value) {
@@ -746,29 +896,65 @@ function fiscalPage() {
                 <div class="w-10 h-10 rounded-xl bg-rose-500/20 flex items-center justify-center">
                     <i class="fab fa-mercadolivre text-rose-400"></i>
                 </div>
-                <h3 class="font-bold text-white">Importar do Mercado Livre</h3>
+                <h3 class="font-bold text-white uppercase italic">Importar Mercado Livre</h3>
             </div>
-            <button @click="showImportMeli = false" class="text-slate-400 hover:text-white">
+            <button @click="showImportMeli = false" class="text-slate-400 hover:text-white transition-colors">
                 <i class="fas fa-times"></i>
             </button>
         </div>
         
         <div class="space-y-4">
             <div>
-                <label class="block text-xs font-bold text-slate-400 mb-2">Data Inicial</label>
-                <input type="date" x-model="meliDataInicio" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white">
+                <label class="block text-[10px] font-black text-slate-500 uppercase italic mb-2">Data Inicial</label>
+                <input type="date" x-model="meliDataInicio" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-black italic focus:ring-rose-500 outline-none transition-all">
             </div>
             <div>
-                <label class="block text-xs font-bold text-slate-400 mb-2">Data Final</label>
-                <input type="date" x-model="meliDataFim" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white">
+                <label class="block text-[10px] font-black text-slate-500 uppercase italic mb-2">Data Final</label>
+                <input type="date" x-model="meliDataFim" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-black italic focus:ring-rose-500 outline-none transition-all">
             </div>
             
-            <p class="text-xs text-slate-500">As notas serão importadas em background. Acompanhe o progresso na aba de Tarefas.</p>
+            <p class="text-[10px] text-slate-500 font-bold italic underline decoration-rose-500/30">As notas serão processadas em background. Acompanhe na aba de Tarefas.</p>
             
-            <button @click="importMeli()" :disabled="importLoading"
-                    class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl flex items-center justify-center gap-2 disabled:opacity-50">
-                <i x-show="importLoading" class="fas fa-spinner fa-spin"></i>
-                <span x-show="!importLoading"><i class="fas fa-download"></i> Importar Notas</span>
+            <button @click="importFromMeli()" :disabled="importing"
+                    class="w-full py-4 bg-rose-600 hover:bg-rose-500 text-white font-black italic uppercase rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 transition-all shadow-lg shadow-rose-900/20">
+                <i x-show="importing" class="fas fa-spinner fa-spin"></i>
+                <span x-show="!importing"><i class="fas fa-download mr-2"></i> Iniciar Importação</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Bling Import Modal -->
+<div x-show="showImportBling" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md" @click.stop>
+        <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-orange-500/20 flex items-center justify-center">
+                    <i class="fas fa-box text-orange-400"></i>
+                </div>
+                <h3 class="font-bold text-white uppercase italic">Importar do Bling</h3>
+            </div>
+            <button @click="showImportBling = false" class="text-slate-400 hover:text-white transition-colors">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <div class="space-y-4">
+            <div>
+                <label class="block text-[10px] font-black text-slate-500 uppercase italic mb-2">Data Inicial</label>
+                <input type="date" x-model="blingDataInicio" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-black italic focus:ring-orange-500 outline-none transition-all">
+            </div>
+            <div>
+                <label class="block text-[10px] font-black text-slate-500 uppercase italic mb-2">Data Final</label>
+                <input type="date" x-model="blingDataFim" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-black italic focus:ring-orange-500 outline-none transition-all">
+            </div>
+            
+            <p class="text-[10px] text-slate-500 font-bold italic underline decoration-orange-500/30">A importação trará as NF-es emitidas e autorizadas no Bling. Acompanhe em Tarefas.</p>
+            
+            <button @click="importFromBling()" :disabled="importing"
+                    class="w-full py-4 bg-orange-600 hover:bg-orange-500 text-white font-black italic uppercase rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 transition-all shadow-lg shadow-orange-900/20">
+                <i x-show="importing" class="fas fa-spinner fa-spin"></i>
+                <span x-show="!importing"><i class="fas fa-download mr-2"></i> Iniciar Importação</span>
             </button>
         </div>
     </div>

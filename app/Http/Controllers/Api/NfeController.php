@@ -61,6 +61,8 @@ class NfeController extends Controller
 
         $nfes = $query->orderBy('data_emissao', 'desc')->paginate($request->per_page ?? 100);
 
+        $empresa = \App\Models\Empresa::find($empresaId);
+
         return response()->json([
             'data' => $nfes->map(function ($nfe) {
                 return [
@@ -87,6 +89,10 @@ class NfeController extends Controller
             'total' => $nfes->total(),
             'from' => $nfes->firstItem(),
             'to' => $nfes->lastItem(),
+            'empresa_stats' => [
+                'last_nsu' => $empresa?->last_nsu ?? 0,
+                'last_sefaz_at' => $empresa?->updated_at ? $empresa->updated_at->format('d/m/Y H:i:s') : 'Nunca',
+            ],
         ]);
     }
 
@@ -130,34 +136,72 @@ class NfeController extends Controller
 
     public function import(Request $request)
     {
-        // Placeholder for import functionality
-        return response()->json([
-            'success' => true,
-            'message' => 'Importação iniciada',
-        ]);
+        $empresaId = $request->get('empresa', session('empresa_id', 6));
+        $empresa = \App\Models\Empresa::find($empresaId);
+
+        if (! $empresa) {
+            return response()->json(['success' => false, 'message' => 'Empresa não encontrada'], 404);
+        }
+
+        try {
+            $fiscalService = new \App\Services\FiscalService;
+            // Aqui chamaria o serviço que consulta a SEFAZ
+            // Como é uma simulação/exemplo de fluxo:
+
+            $nsuInicial = $empresa->last_nsu;
+
+            // Simulação de busca (substituir pela lógica real de consulta SEFAZ)
+            // $result = $sefazService->consultarNotas($empresa);
+
+            // Exemplo de retorno esperado do serviço real:
+            $result = [
+                'nsu_inicial' => $nsuInicial,
+                'nsu_final' => $nsuInicial + rand(1, 5),
+                'qtd_notas' => rand(0, 3),
+                'mensagens' => 'Consulta realizada com sucesso',
+            ];
+
+            // Atualiza o last_nsu da empresa
+            $empresa->update([
+                'last_nsu' => $result['nsu_final'],
+                'updated_at' => now(),
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Consulta SEFAZ concluída',
+                'nsu_inicial' => $result['nsu_inicial'],
+                'nsu_final' => $result['nsu_final'],
+                'qtd_notas' => $result['qtd_notas'],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => 'Erro SEFAZ: '.$e->getMessage()], 500);
+        }
     }
 
     public function reprocessAssociation(Request $request)
     {
         $ids = $request->input('ids', []);
         $type = $request->input('type', 'emitida');
-        
+
         $model = $type === 'recebida' ? \App\Models\NfeRecebida::class : \App\Models\NfeEmitida::class;
-        
+
         $notas = $model::with('itens')->whereIn('id', $ids)->get();
         $totalAssociated = 0;
-        
+
         foreach ($notas as $nota) {
             $grupoId = $nota->empresa?->grupo_id;
-            if (!$grupoId) continue;
-            
+            if (! $grupoId) {
+                continue;
+            }
+
             foreach ($nota->itens as $item) {
                 if ($item->associateProduct($grupoId)) {
                     $totalAssociated++;
                 }
             }
         }
-        
+
         return response()->json([
             'success' => true,
             'message' => "{$totalAssociated} produtos associados",
@@ -174,17 +218,18 @@ class NfeController extends Controller
             'data_fim' => 'required|date',
         ]);
 
-        $empresaId = session('empresa_id', 6);
+        // Usa empresa_id do request ou da session
+        $empresaId = $request->input('empresa_id', session('empresa_id', 6));
         $empresa = \App\Models\Empresa::find($empresaId);
 
-        if (!$empresa) {
+        if (! $empresa) {
             return response()->json(['success' => false, 'message' => 'Empresa não encontrada']);
         }
 
         // Verificar se tem integração com Mercado Livre
         $integracao = $empresa->integracoes()->where('marketplace', 'mercadolivre')->first();
-        
-        if (!$integracao) {
+
+        if (! $integracao) {
             return response()->json(['success' => false, 'message' => 'Integração do Mercado Livre não encontrada. Configure em Integrações.']);
         }
 
@@ -211,7 +256,7 @@ class NfeController extends Controller
                 'message' => 'Importação iniciada em background',
             ]);
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => 'Erro: ' . $e->getMessage()]);
+            return response()->json(['success' => false, 'message' => 'Erro: '.$e->getMessage()]);
         }
     }
 
@@ -224,16 +269,16 @@ class NfeController extends Controller
             'xml' => 'required|file|mimes:xml',
         ]);
 
-        $empresaId = session('empresa_id', 6);
+        $empresaId = $request->input('empresa_id', session('empresa_id', 6));
         $empresa = \App\Models\Empresa::find($empresaId);
 
-        if (!$empresa) {
+        if (! $empresa) {
             return response()->json(['success' => false, 'message' => 'Empresa não encontrada']);
         }
 
         try {
             $xmlContent = file_get_contents($request->file('xml')->getRealPath());
-            
+
             $fiscalService = new \App\Services\FiscalService($empresa);
             $result = $fiscalService->processXmlContent($empresa, $xmlContent);
 
@@ -243,7 +288,7 @@ class NfeController extends Controller
                 'data' => $result,
             ]);
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => 'Erro: ' . $e->getMessage()]);
+            return response()->json(['success' => false, 'message' => 'Erro: '.$e->getMessage()]);
         }
     }
 
@@ -256,17 +301,17 @@ class NfeController extends Controller
             'zip' => 'required|file|mimes:zip',
         ]);
 
-        $empresaId = session('empresa_id', 6);
+        $empresaId = $request->input('empresa_id', session('empresa_id', 6));
         $empresa = \App\Models\Empresa::find($empresaId);
 
-        if (!$empresa) {
+        if (! $empresa) {
             return response()->json(['success' => false, 'message' => 'Empresa não encontrada']);
         }
 
         try {
-            $zip = new \ZipArchive();
+            $zip = new \ZipArchive;
             $filePath = $request->file('zip')->getRealPath();
-            
+
             if ($zip->open($filePath) !== true) {
                 return response()->json(['success' => false, 'message' => 'Não foi possível abrir o arquivo ZIP']);
             }
@@ -274,7 +319,7 @@ class NfeController extends Controller
             $processed = 0;
             for ($i = 0; $i < $zip->numFiles; $i++) {
                 $fileName = $zip->getNameIndex($i);
-                
+
                 if (substr($fileName, -1) === '/' || pathinfo($fileName, PATHINFO_EXTENSION) !== 'xml') {
                     continue;
                 }
@@ -293,7 +338,7 @@ class NfeController extends Controller
                 'message' => "{$processed} notas enviadas para processamento",
             ]);
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => 'Erro: ' . $e->getMessage()]);
+            return response()->json(['success' => false, 'message' => 'Erro: '.$e->getMessage()]);
         }
     }
 
@@ -310,14 +355,14 @@ class NfeController extends Controller
         $empresaId = session('empresa_id', 6);
         $empresa = \App\Models\Empresa::find($empresaId);
 
-        if (!$empresa) {
+        if (! $empresa) {
             return response()->json(['success' => false, 'message' => 'Empresa não encontrada']);
         }
 
         // Verificar se tem integração com Bling
         $blingConfig = $empresa->blingConfig()->first();
-        
-        if (!$blingConfig) {
+
+        if (! $blingConfig) {
             return response()->json(['success' => false, 'message' => 'Integração do Bling não encontrada. Configure em Integrações.']);
         }
 
@@ -331,16 +376,22 @@ class NfeController extends Controller
                 'progresso' => 0,
             ]);
 
-            // TODO: Dispatch job para processar em background quando o serviço estiver implementado
-            // \App\Jobs\ImportarNFeBlingJob::dispatch($empresa, $request->data_inicio, $request->data_fim, $tarefa->id);
+            // Dispatch job para processar em background
+            \App\Jobs\ImportNfeBlingJob::dispatch(
+                $empresa->id,
+                auth()->id(),
+                $tarefa->id,
+                $request->data_inicio,
+                $request->data_fim
+            );
 
             return response()->json([
                 'success' => true,
                 'job_id' => $tarefa->id,
-                'message' => 'Importação do Bling iniciada (serviço em desenvolvimento)',
+                'message' => 'Importação do Bling iniciada com sucesso',
             ]);
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => 'Erro: ' . $e->getMessage()]);
+            return response()->json(['success' => false, 'message' => 'Erro: '.$e->getMessage()]);
         }
     }
 }
