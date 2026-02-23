@@ -16,6 +16,7 @@ class Product extends Model
     protected $fillable = [
         'empresa_id',
         'parent_id',
+        'herdar',
         'variation_color',
         'variation_size',
         'variation_order',
@@ -133,7 +134,7 @@ class Product extends Model
     // Verifica se é variação
     public function getIsVariationAttribute(): bool
     {
-        return !empty($this->parent_id);
+        return ! empty($this->parent_id);
     }
 
     // Verifica se é pai de variações
@@ -154,6 +155,7 @@ class Product extends Model
         if ($this->has_variations) {
             return $this->estoque + $this->variations->sum('estoque');
         }
+
         return $this->estoque;
     }
 
@@ -162,26 +164,26 @@ class Product extends Model
     {
         $custoBase = floatval($this->preco_custo ?? 0);
         $custoAdicional = floatval($this->custo_adicional ?? 0);
-        
+
         // Se custo adicional for por unidade, soma ao custo base
         // Se for por produto (kit), já está incluído no custo base
         return $custoBase + $custoAdicional;
     }
 
     // ==================== PRODUTO COMPOSTO ====================
-    
+
     // Componentes deste produto composto
     public function components(): HasMany
     {
         return $this->hasMany(ProductComponent::class, 'product_id')->orderBy('sort_order');
     }
-    
+
     // Produtos que são componentes (buscar quem usa este produto como componente)
     public function usedInCompounds(): HasMany
     {
         return $this->hasMany(ProductComponent::class, 'component_product_id');
     }
-    
+
     // Produtos compostos que usam este produto
     public function compounds(): BelongsToMany
     {
@@ -189,53 +191,53 @@ class Product extends Model
             ->withPivot('quantity', 'unit_price')
             ->withTimestamps();
     }
-    
+
     // Verifica se é produto composto
     public function getIsCompoundAttribute(): bool
     {
         return $this->components()->count() > 0;
     }
-    
+
     // Estoque máximo possível do kit (baseado nos componentes)
     public function getCompoundMaxStockAttribute(): int
     {
-        if (!$this->is_compound) {
+        if (! $this->is_compound) {
             return $this->estoque;
         }
-        
+
         $maxStock = PHP_INT_MAX;
-        
+
         foreach ($this->components as $component) {
             $componentProduct = $component->componentProduct;
-            if (!$componentProduct) {
+            if (! $componentProduct) {
                 continue;
             }
-            
+
             $available = $componentProduct->estoque;
             $needed = $component->quantity;
-            
+
             if ($needed > 0) {
                 $possible = intdiv($available, $needed);
                 $maxStock = min($maxStock, $possible);
             }
         }
-        
+
         return $maxStock === PHP_INT_MAX ? 0 : $maxStock;
     }
-    
+
     // Valor total dos componentes
     public function getComponentsTotalPriceAttribute(): float
     {
-        if (!$this->is_compound) {
+        if (! $this->is_compound) {
             return $this->preco_venda;
         }
-        
+
         $total = 0;
         foreach ($this->components as $component) {
             $price = $component->unit_price ?? $component->componentProduct->preco_venda ?? 0;
             $total += $price * $component->quantity;
         }
-        
+
         return $total;
     }
 

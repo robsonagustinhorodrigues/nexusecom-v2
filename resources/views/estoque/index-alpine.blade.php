@@ -239,7 +239,7 @@ function estoque() {
             try {
                 await fetch('/api/estoque/movimentacao', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
                     body: JSON.stringify(this.movimentacao)
                 });
                 this.showMovimentacao = false;

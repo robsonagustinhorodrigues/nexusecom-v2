@@ -239,8 +239,10 @@ class NfeController extends Controller
 
         try {
             // Criar tarefa para rastrear
+            $userId = auth()->id() ?? \App\Models\User::first()?->id;
             $tarefa = \App\Models\Tarefa::create([
                 'empresa_id' => $empresa->id,
+                'user_id' => $userId,
                 'tipo' => 'import_nfe_meli',
                 'descricao' => "Importar NF-es do Mercado Livre de {$request->data_inicio} até {$request->data_fim}",
                 'status' => 'processando',
@@ -279,8 +281,8 @@ class NfeController extends Controller
         try {
             $xmlContent = file_get_contents($request->file('xml')->getRealPath());
 
-            $fiscalService = new \App\Services\FiscalService($empresa);
-            $result = $fiscalService->processXmlContent($empresa, $xmlContent);
+            $fiscalService = new \App\Services\FiscalService;
+            $result = $fiscalService->importXml($xmlContent, $empresa->id);
 
             return response()->json([
                 'success' => true,
@@ -316,6 +318,7 @@ class NfeController extends Controller
                 return response()->json(['success' => false, 'message' => 'Não foi possível abrir o arquivo ZIP']);
             }
 
+            $fiscalService = new \App\Services\FiscalService;
             $processed = 0;
             for ($i = 0; $i < $zip->numFiles; $i++) {
                 $fileName = $zip->getNameIndex($i);
@@ -326,8 +329,12 @@ class NfeController extends Controller
 
                 $xmlContent = $zip->getFromIndex($i);
                 if ($xmlContent) {
-                    \App\Jobs\ImportarNFeMeliJob::dispatch($empresa, $xmlContent);
-                    $processed++;
+                    try {
+                        $fiscalService->importXml($xmlContent, $empresa->id);
+                        $processed++;
+                    } catch (\Exception $e) {
+                        \Log::error('Erro ao processar XML do ZIP: '.$e->getMessage());
+                    }
                 }
             }
 
@@ -335,7 +342,7 @@ class NfeController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => "{$processed} notas enviadas para processamento",
+                'message' => "{$processed} notas importadas com sucesso",
             ]);
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => 'Erro: '.$e->getMessage()]);
@@ -368,8 +375,10 @@ class NfeController extends Controller
 
         try {
             // Criar tarefa para rastrear
+            $userId = auth()->id() ?? \App\Models\User::first()?->id;
             $tarefa = \App\Models\Tarefa::create([
                 'empresa_id' => $empresa->id,
+                'user_id' => $userId,
                 'tipo' => 'import_nfe_bling',
                 'descricao' => "Importar NF-es do Bling de {$request->data_inicio} até {$request->data_fim}",
                 'status' => 'processando',

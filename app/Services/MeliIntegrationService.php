@@ -1202,4 +1202,219 @@ class MeliIntegrationService
             return ['cost' => 0, 'source' => 'error', 'is_free_shipping' => false];
         }
     }
+
+    /**
+     * Busca ofertas de concorrentes para um produto do catálogo do Mercado Livre
+     */
+    public function getCatalogOffers(string $catalogProductId, ?string $permalink = null): ?array
+    {
+        $token = $this->getAccessToken();
+        if (! $token) {
+            Log::warning('Meli getCatalogOffers: Token não disponível');
+
+            return null;
+        }
+
+        try {
+            // Tenta API oficial primeiro
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer '.$token,
+            ])->get("https://api.mercadolibre.com/catalog_products/{$catalogProductId}/offers", [
+                'include' => 'all',
+            ]);
+
+            if ($response->successful()) {
+                $data = $response->json();
+
+                $offers = [];
+
+                if (isset($data['offers']) && is_array($data['offers'])) {
+                    foreach ($data['offers'] as $offer) {
+                        $listingType = $offer['listing_type']['id'] ?? 'gold_special';
+                        $sellerType = 'classic';
+                        if ($listingType === 'fulfillment') {
+                            $sellerType = 'full';
+                        } elseif (in_array($listingType, ['gold_pro', 'premium'])) {
+                            $sellerType = 'premium';
+                        }
+
+                        $offers[] = [
+                            'id' => $offer['seller']['id'] ?? null,
+                            'price' => floatval($offer['price'] ?? 0),
+                            'listing_type_id' => $listingType,
+                            'shipping' => [
+                                'logistic_type' => $offer['shipping']['logistic_type'] ?? null,
+                            ],
+                            'seller_type' => $sellerType,
+                            'is_full' => $sellerType === 'full',
+                            'is_premium' => $sellerType === 'premium',
+                        ];
+                    }
+                }
+
+                return [
+                    'offers' => $offers,
+                    'product_id' => $catalogProductId,
+                    'total_offers' => count($offers),
+                ];
+            }
+
+            // Fallback: tenta scraping
+            return $this->buscarConcorrentesViaScraping($catalogProductId, $permalink);
+
+        } catch (\Exception $e) {
+            Log::error('Meli getCatalogOffers exception: '.$e->getMessage());
+
+            return $this->buscarConcorrentesViaScraping($catalogProductId, $permalink);
+        }
+    }
+
+    /**
+     * Busca concorrentes via scraping com detecção de full/premium/classic
+     */
+    private function buscarConcorrentesViaScraping(string $catalogProductId, ?string $permalink): ?array
+    {
+        if (! $permalink) {
+            return null;
+        }
+
+        $cookiesFile = storage_path('app/cookies/cookies_meli_'.$this->empresaId.'.json');
+        if (! file_exists($cookiesFile)) {
+            $cookiesFile = storage_path('app/cookies/cookies_meli_default.json');
+        }
+
+        if (! file_exists($cookiesFile)) {
+            Log::warning('Meli scraping: Arquivo de cookies não encontrado');
+
+            return null;
+        }
+
+        try {
+            $nodeScript = '
+                const puppeteer = require("puppeteer");
+                const fs = require("fs");
+                
+                const COOKIES_FILE = "'.$cookiesFile.'";
+                
+                (async () => {
+                    const browser = await puppeteer.launch({
+                        headless: true,
+                        executablePath: "/usr/bin/chromium-browser",
+                        args: ["--no-sandbox", "--disable-setuid-sandbox"]
+                    });
+                    
+                    const context = await browser.createBrowserContext();
+                    const page = await context.newPage();
+                    
+                    await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+                    await page.setViewport({ width: 1366, height: 768 });
+                    
+                    const cookies = JSON.parse(fs.readFileSync(COOKIES_FILE, "utf8"));
+                    await page.setCookie(...cookies);
+                    
+                    await page.goto("'.addslashes($permalink).'", { waitUntil: "networkidle2", timeout: 60000 });
+                    await new Promise(r => setTimeout(r, 3000));
+                    
+                    const offers = await page.evaluate(() => {
+                        const results = [];
+                        
+                        // Busca resultados na página de lista
+                        const items = document.querySelectorAll(".ui-search-result__wrapper");
+                        
+                        items.forEach(item => {
+                            const priceElement = item.querySelector(".price-tag-text, .andes-money-amount");
+                            if (!priceElement) return;
+                            
+                            const priceText = priceElement.textContent.trim();
+                            const price = parseFloat(priceText.replace(/[^\d,]/g, "").replace(",", "."));
+                            
+                            if (!price || price <= 15) return;
+                            
+                            // Detecta se é Full
+                            const isFull = item.querySelector(".ui-pdp-icon--full, .ui-pdp-icon--fulfillment") !== null;
+                            
+                            // Detecta se é Premium (tem "sem juros")
+                            const semJurosElement = item.querySelector(".ui-pdp-installments");
+                            const isPremium = semJurosElement && semJurosElement.textContent.includes("sem juros");
+                            
+                            let sellerType = "classic";
+                            if (isFull) sellerType = "full";
+                            else if (isPremium) sellerType = "premium";
+                            
+                            results.push({
+                                price: price,
+                                type: sellerType,
+                                seller: "Concorrente",
+                                is_full: isFull,
+                                is_premium: isPremium
+                            });
+                        });
+                        
+                        return results;
+                    });
+                    
+                    console.log(JSON.stringify(offers));
+                    
+                    await context.close();
+                    await browser.close();
+                })();
+            ';
+
+            $command = 'cd /var/www && node -e '.escapeshellarg($nodeScript).' 2>&1';
+            $output = shell_exec($command);
+
+            if (! $output) {
+                Log::warning('Meli scraping: Comando não retornou output');
+
+                return null;
+            }
+
+            $offersData = json_decode($output, true);
+
+            if (empty($offersData)) {
+                Log::warning('Meli scraping: Nenhum preço encontrado');
+
+                return null;
+            }
+
+            $offers = [];
+            foreach ($offersData as $offerData) {
+                $price = floatval($offerData['price'] ?? 0);
+                $sellerType = $offerData['type'] ?? 'classic';
+
+                $listingType = match ($sellerType) {
+                    'full' => 'fulfillment',
+                    'premium' => 'gold_pro',
+                    default => 'gold_special'
+                };
+
+                if ($price > 0 && $price > 15) {
+                    $offers[] = [
+                        'id' => null,
+                        'price' => $price,
+                        'listing_type_id' => $listingType,
+                        'shipping' => ['logistic_type' => $sellerType === 'full' ? 'fulfillment' : null],
+                        'title' => 'Concorrente',
+                        'seller_type' => $sellerType,
+                        'is_full' => $offerData['is_full'] ?? false,
+                        'is_premium' => $offerData['is_premium'] ?? false,
+                    ];
+                }
+            }
+
+            Log::info('Meli scraping: Encontrados '.count($offers).' preços');
+
+            return [
+                'offers' => $offers,
+                'product_id' => $catalogProductId,
+                'total_offers' => count($offers),
+                'scraped' => true,
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Meli scraping exception: '.$e->getMessage());
+
+            return null;
+        }
+    }
 }

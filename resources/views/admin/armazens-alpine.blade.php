@@ -179,7 +179,7 @@ function depositosPage() {
                     method: method,
                     headers: { 
                         'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                     },
                     body: JSON.stringify(this.form)
                 });
@@ -203,7 +203,7 @@ function depositosPage() {
             try {
                 const response = await fetch(`/api/estoque/depositos/${id}`, {
                     method: 'DELETE',
-                    headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+                    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }
                 });
                 if (response.ok) {
                     await this.loadDepositos();

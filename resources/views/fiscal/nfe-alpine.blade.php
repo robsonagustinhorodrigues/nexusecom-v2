@@ -294,32 +294,32 @@
 <script>
 function fiscalPage() {
     return {
-        view: 'recebidas',
-        filtroSituacao: '',
-        filtersOpen: false,
-        associationFilter: '',
-        dataInicio: '',
-        dataFim: '',
-        search: '',
-        importMenu: false,
-        showImportMeli: false,
-        showImportBling: false,
-        showImportXml: false,
-        showImportZip: false,
-        importLoading: false,
-        importResult: null,
-        meliDataInicio: '',
-        meliDataFim: '',
-        blingDataInicio: '',
-        blingDataFim: '',
-        sefazCountdown: '',
-        canSearchSefaz: true,
-        empresaStats: {
-            last_nsu: 0,
-            last_sefaz_at: null
-        },
-        nfe: [],
-        selected: [],
+            view: 'recebidas',
+            filtroSituacao: '',
+            filtersOpen: false,
+            associationFilter: '',
+            dataInicio: '',
+            dataFim: '',
+            search: '',
+            importMenu: false,
+            showImportMeli: false,
+            showImportBling: false,
+            showImportXml: false,
+            showImportZip: false,
+            importLoading: false,
+            importResult: null,
+            meliDataInicio: '',
+            meliDataFim: '',
+            blingDataInicio: '',
+            blingDataFim: '',
+            sefazCountdown: '',
+            canSearchSefaz: true,
+            empresaStats: {
+                last_nsu: 0,
+                last_sefaz_at: null
+            },
+            nfe: [],
+            selected: [],
         loading: false,
         importing: false,
         currentPage: 1,
@@ -462,7 +462,7 @@ function fiscalPage() {
                 const response = await fetch(`/api/nfes/import?empresa=${empresaId}`, {
                     method: 'POST',
                     headers: { 
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
                         'Accept': 'application/json'
                     }
                 });
@@ -489,7 +489,7 @@ function fiscalPage() {
                 const response = await fetch(`/api/nfes/import?empresa=${empresaId}`, {
                     method: 'POST',
                     headers: { 
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
                         'Accept': 'application/json'
                     }
                 });
@@ -567,7 +567,7 @@ function fiscalPage() {
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                     },
                     body: JSON.stringify({
                         empresa_id: empresaId,
@@ -640,7 +640,7 @@ function fiscalPage() {
                 try {
                     const response = await fetch('/api/nfes/import-xml', {
                         method: 'POST',
-                        headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                        headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
                         body: formData
                     });
                     
@@ -673,7 +673,7 @@ function fiscalPage() {
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                     },
                     body: JSON.stringify({
                         empresa_id: empresaId,
@@ -763,7 +763,7 @@ function fiscalPage() {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                     },
                     body: JSON.stringify({
                         ids: this.selected,
@@ -810,7 +810,7 @@ function fiscalPage() {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                     },
                     body: JSON.stringify({
                         data_inicio: this.meliDataInicio,
@@ -845,7 +845,7 @@ function fiscalPage() {
             try {
                 const response = await fetch('/api/nfe/import/xml', {
                     method: 'POST',
-                    headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
                     body: formData
                 });
                 
@@ -875,7 +875,7 @@ function fiscalPage() {
             try {
                 const response = await fetch('/api/nfe/import/zip', {
                     method: 'POST',
-                    headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
                     body: formData
                 });
                 

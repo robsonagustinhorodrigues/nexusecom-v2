@@ -39,6 +39,16 @@ class AnuncioController extends Controller
             $query->whereNull('product_sku_id');
         }
 
+        if ($request->repricer === 'ativo') {
+            $query->whereHas('repricerConfig', function ($q) {
+                $q->where('is_active', true);
+            });
+        } elseif ($request->repricer === 'inativo') {
+            $query->whereDoesntHave('repricerConfig', function ($q) {
+                $q->where('is_active', true);
+            });
+        }
+
         if ($request->search) {
             $search = '%'.mb_strtolower($request->search, 'UTF-8').'%';
             $query->where(function ($q) use ($search) {
@@ -93,15 +103,22 @@ class AnuncioController extends Controller
             'url' => $ad->url ?? '#',
             'sold_quantity' => intval($ad->sold_quantity ?? 0),
             'visits' => intval($jsonData['visits'] ?? 0),
-            'listing_type' => $jsonData['listing_type_id'] ?? 'gold_special',
             'product_linked' => ! empty($ad->product_sku_id),
             'produto_id' => $ad->produto_id,
+            'product_sku' => $ad->productSku?->sku ?? $ad->productSku?->product?->sku,
+            'product_nome' => $ad->productSku?->product?->nome,
+            'listing_type' => $jsonData['listing_type_id'] ?? 'gold_special',
             'custo' => floatval($lucroData['custo_total'] ?? 0),
             'custo_base' => floatval($lucroData['custo'] ?? 0),
             'custo_adicional' => floatval($lucroData['custo_adicional'] ?? 0),
             'lucro' => floatval($lucroData['lucro_bruto'] ?? 0),
             'margem' => floatval($lucroData['margem'] ?? 0),
             'taxas' => floatval($lucroData['taxas'] ?? 0),
+            'taxa_percent' => floatval($lucroData['taxa_percent'] ?? 0),
+            'imposto' => floatval($lucroData['imposto'] ?? 0),
+            'imposto_percent' => floatval($lucroData['imposto_percent'] ?? 0),
+            'frete' => floatval($lucroData['frete'] ?? 0),
+            'frete_gratis' => $lucroData['frete_gratis'] ?? false,
             'medidas' => $medidas,
             'is_catalog' => $isCatalog,
             'has_promotion' => $hasPromotion,
@@ -143,6 +160,13 @@ class AnuncioController extends Controller
         // Custo total = custo base + custo adicional
         $custoTotal = $custo + $custoAdicional;
 
+        // Buscar imposto da empresa
+        $empresa = \App\Models\Empresa::find($anuncio->empresa_id);
+        $impostoPercent = floatval($empresa?->aliquota_icms ?? 10) / 100;
+        if ($impostoPercent <= 0) {
+            $impostoPercent = 0.10; // Default 10%
+        }
+
         $jsonData = is_array($anuncio->json_data) ? $anuncio->json_data : json_decode($anuncio->json_data, true) ?? [];
         $listingType = $jsonData['listing_type_id'] ?? 'gold_special';
 
@@ -158,7 +182,7 @@ class AnuncioController extends Controller
         $frete = floatval($anuncio->frete_custo_seller ?? 0);
         $freteGratis = $frete <= 0;
 
-        $imposto = $preco * 0.10;
+        $imposto = $preco * $impostoPercent;
         $valorTaxas = $preco * $taxaPercent;
 
         $lucroBruto = $preco - $custoTotal - $valorTaxas - $frete - $imposto;
@@ -171,6 +195,7 @@ class AnuncioController extends Controller
             'custo_total' => $custoTotal,
             'taxas' => $valorTaxas,
             'taxa_percent' => $taxaPercent * 100,
+            'imposto_percent' => $impostoPercent * 100,
             'frete' => $frete,
             'frete_gratis' => $freteGratis,
             'imposto' => $imposto,
@@ -261,17 +286,34 @@ class AnuncioController extends Controller
     public function searchProducts(Request $request)
     {
         $empresaId = $request->get('empresa', session('empresa_id', 6));
+        $empresa = \App\Models\Empresa::find($empresaId);
+        $grupoId = $empresa?->grupo_id;
         $query = $request->get('q', '');
 
-        $products = \App\Models\Product::where('empresa_id', $empresaId)
+        if (empty($query) || ! $grupoId) {
+            return response()->json([]);
+        }
+
+        $products = \App\Models\Product::where('grupo_id', $grupoId)
+            ->where('tipo', '!=', 'variacao') // Excluir produtos pais (tipo variacao = pai)
             ->where(function ($q) use ($query) {
-                $q->where('nome', 'like', "%{$query}%")
-                    ->orWhere('sku', 'like', "%{$query}%");
+                $q->whereRaw('LOWER(nome) LIKE ?', ['%'.strtolower($query).'%'])
+                    ->orWhereRaw('LOWER(sku) LIKE ?', ['%'.strtolower($query).'%']);
             })
             ->limit(20)
             ->get()
             ->map(function ($p) {
                 $firstSku = $p->skus()->first();
+
+                // Verificar se é uma variação (filho)
+                $isVariation = ! empty($p->parent_id);
+                $parentName = null;
+                if ($isVariation && $p->parent) {
+                    $parentName = $p->parent->nome;
+                }
+
+                // Contar variaçõesfilhos
+                $variationsCount = $p->variations()->count();
 
                 return [
                     'id' => $p->id,
@@ -280,6 +322,12 @@ class AnuncioController extends Controller
                     'preco_venda' => floatval($p->preco_venda),
                     'preco_custo' => floatval($firstSku?->preco_custo ?? $p->preco_custo ?? 0),
                     'estoque' => $p->skus()->sum('estoque') ?? 0,
+                    'is_variation' => $isVariation,
+                    'parent_name' => $parentName,
+                    'variation_color' => $p->variation_color,
+                    'variation_size' => $p->variation_size,
+                    'has_variations' => $variationsCount > 0,
+                    'variations_count' => $variationsCount,
                 ];
             });
 
@@ -315,6 +363,75 @@ class AnuncioController extends Controller
         return response()->json(['success' => true, 'message' => 'Produto vinculado com sucesso!']);
     }
 
+    public function desvincular(Request $request, $id)
+    {
+        $anuncio = MarketplaceAnuncio::findOrFail($id);
+
+        $anuncio->update([
+            'product_sku_id' => null,
+            'produto_id' => null,
+        ]);
+
+        return response()->json(['success' => true, 'message' => 'Produto desvinculado com sucesso!']);
+    }
+
+    public function vincularPorSku(Request $request)
+    {
+        $empresaId = $request->get('empresa', session('empresa_id', 6));
+        $empresa = \App\Models\Empresa::find($empresaId);
+        $grupoId = $empresa?->grupo_id;
+
+        if (! $grupoId) {
+            return response()->json(['success' => false, 'message' => 'Empresa não encontrada'], 422);
+        }
+
+        // Buscar anúncios sem vínculo
+        $anunciosSemVinculo = MarketplaceAnuncio::where('empresa_id', $empresaId)
+            ->whereNull('product_sku_id')
+            ->whereNotNull('sku')
+            ->where('sku', '!=', '')
+            ->get();
+
+        $vinculados = 0;
+        $naoEncontrados = [];
+
+        foreach ($anunciosSemVinculo as $anuncio) {
+            // Buscar produto pelo SKU no grupo
+            $produto = \App\Models\Product::where('grupo_id', $grupoId)
+                ->where('sku', $anuncio->sku)
+                ->first();
+
+            if ($produto) {
+                // Criar ou buscar SKU
+                $sku = $produto->skus()->first();
+                if (! $sku) {
+                    $sku = $produto->skus()->create([
+                        'sku' => $produto->sku,
+                        'label' => 'Padrão',
+                        'preco_venda' => $produto->preco_venda,
+                        'estoque' => 0,
+                    ]);
+                }
+
+                $anuncio->update([
+                    'product_sku_id' => $sku->id,
+                    'produto_id' => $produto->id,
+                ]);
+                $vinculados++;
+            } else {
+                $naoEncontrados[] = $anuncio->sku;
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => "{$vinculados} produto(s) vinculado(s) por SKU",
+            'vinculados' => $vinculados,
+            'nao_encontrados' => count($naoEncontrados),
+            'skus_nao_encontrados' => array_slice($naoEncontrados, 0, 10), // Primeiros 10
+        ]);
+    }
+
     public function getRepricerConfig($id)
     {
         $anuncio = MarketplaceAnuncio::findOrFail($id);
@@ -328,6 +445,9 @@ class AnuncioController extends Controller
             'min_profit_margin' => $config?->min_profit_margin ?? null,
             'min_profit_type' => $config?->min_profit_type ?? 'percent',
             'is_active' => $config?->is_active ?? false,
+            'filter_full_only' => $config?->filter_full_only ?? false,
+            'filter_classic_only' => $config?->filter_classic_only ?? false,
+            'filter_premium_only' => $config?->filter_premium_only ?? false,
         ]);
     }
 
@@ -341,6 +461,9 @@ class AnuncioController extends Controller
             'min_profit_margin' => 'nullable|numeric',
             'min_profit_type' => 'nullable|in:percent,value',
             'is_active' => 'boolean',
+            'filter_full_only' => 'boolean',
+            'filter_classic_only' => 'boolean',
+            'filter_premium_only' => 'boolean',
         ]);
 
         \App\Models\AnuncioRepricerConfig::updateOrCreate(
@@ -503,6 +626,31 @@ class AnuncioController extends Controller
             'success' => true,
             'message' => 'Produto criado com sucesso!',
             'product_id' => $product->id,
+        ]);
+    }
+
+    public function getRepricerLogs($id)
+    {
+        $logs = \App\Models\RepricerLog::where('marketplace_anuncio_id', $id)
+            ->orderBy('created_at', 'desc')
+            ->limit(50)
+            ->get();
+
+        return response()->json([
+            'data' => $logs->map(function ($log) {
+                return [
+                    'id' => $log->id,
+                    'strategy' => $log->strategy,
+                    'preco_anterior' => floatval($log->preco_anterior),
+                    'preco_novo' => floatval($log->preco_novo),
+                    'menor_concorrente' => floatval($log->menor_concorrente),
+                    'margem_lucro' => floatval($log->margem_lucro),
+                    'lucro_bruto' => floatval($log->lucro_bruto),
+                    'status' => $log->status,
+                    'mensagem' => $log->mensagem,
+                    'created_at' => $log->created_at->format('d/m/Y H:i:s'),
+                ];
+            }),
         ]);
     }
 }

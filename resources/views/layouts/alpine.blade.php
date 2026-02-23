@@ -3,9 +3,54 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'NexusEcom')</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+    function appLayout() {
+        return {
+            sidebarOpen: window.innerWidth >= 1024,
+            empresaId: localStorage.getItem('empresa_id') || '4',
+            notifications: [],
+            notifCount: 0,
+            
+            init() {
+                if (!localStorage.getItem('empresa_id')) {
+                    localStorage.setItem('empresa_id', '4');
+                }
+                this.empresaId = localStorage.getItem('empresa_id') || '4';
+                
+                window.addEventListener('resize', () => {
+                    if(window.innerWidth >= 1024) this.sidebarOpen = true;
+                });
+                this.$watch('empresaId', (val) => {
+                    localStorage.setItem('empresa_id', val);
+                });
+                this.loadNotifications();
+                setInterval(() => this.loadNotifications(), 30000);
+            },
+
+            changeEmpresa() {
+                window.dispatchEvent(new CustomEvent('empresa-changed', { 
+                    detail: this.empresaId 
+                }));
+            },
+
+            async loadNotifications() {
+                try {
+                    const res = await fetch('/api/admin/notificacoes');
+                    if (res.ok) {
+                        const data = await res.json();
+                        this.notifications = data.notificacoes || [];
+                        this.notifCount = this.notifications.filter(n => !n.read).length;
+                    }
+                } catch (e) { console.error(e); }
+            }
+        }
+    }
+    </script>
+    @yield('scripts')
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
@@ -174,52 +219,6 @@
             </main>
         </div>
     </div>
-
-    <script>
-    function appLayout() {
-        return {
-            sidebarOpen: window.innerWidth >= 1024,
-            empresaId: localStorage.getItem('empresa_id') || '4',
-            notifications: [],
-            notifCount: 0,
-            
-            init() {
-                // Ensure localStorage has a value on first load
-                if (!localStorage.getItem('empresa_id')) {
-                    localStorage.setItem('empresa_id', '4');
-                }
-                this.empresaId = localStorage.getItem('empresa_id') || '4';
-                
-                window.addEventListener('resize', () => {
-                    if(window.innerWidth >= 1024) this.sidebarOpen = true;
-                });
-                this.$watch('empresaId', (val) => {
-                    localStorage.setItem('empresa_id', val);
-                });
-                this.loadNotifications();
-                // Refresh notifications every 30 seconds
-                setInterval(() => this.loadNotifications(), 30000);
-            },
-
-            changeEmpresa() {
-                window.dispatchEvent(new CustomEvent('empresa-changed', { 
-                    detail: this.empresaId 
-                }));
-            },
-
-            async loadNotifications() {
-                try {
-                    const res = await fetch('/api/admin/notificacoes');
-                    if (res.ok) {
-                        const data = await res.json();
-                        this.notifications = data.notificacoes || [];
-                        this.notifCount = this.notifications.filter(n => !n.read).length;
-                    }
-                } catch (e) { console.error(e); }
-            }
-        }
-    }
-    </script>
     @yield('scripts')
     @stack('scripts')
 </body>

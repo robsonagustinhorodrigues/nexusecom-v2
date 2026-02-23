@@ -23,10 +23,21 @@
                 </button>
             </div>
             
-            <button @click="syncAnuncios()" :disabled="syncing" class="px-4 py-2 bg-yellow-500 hover:bg-yellow-400 text-slate-900 rounded-xl font-bold text-sm flex items-center gap-2">
-                <i class="fas fa-sync" :class="syncing ? 'fa-spin' : ''"></i>
-                <span x-text="syncing ? 'Sincronizando...' : 'Sincronizar'"></span>
-            </button>
+            <div x-data="{ open: false }" class="relative">
+                <button @click="open = !open" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-bold text-sm flex items-center gap-2">
+                    <i class="fas fa-ellipsis-h"></i>
+                </button>
+                <div x-show="open" @click.away="open = false" class="absolute right-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden">
+                    <button @click="syncAnuncios(); open = false" :disabled="syncing" class="w-full px-4 py-3 text-left text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2">
+                        <i class="fas fa-sync" :class="syncing ? 'fa-spin' : ''"></i>
+                        <span x-text="syncing ? 'Sincronizando...' : 'Sincronizar'"></span>
+                    </button>
+                    <button @click="vincularPorSku(); open = false" class="w-full px-4 py-3 text-left text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2">
+                        <i class="fas fa-link"></i>
+                        Vincular por SKU
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -59,6 +70,11 @@
                 <option value="">Vínculo: Todos</option>
                 <option value="vinculado">Vinculados</option>
                 <option value="nao_vinculado">Não Vinculados</option>
+            </select>
+            <select x-model="repricerFilter" @change="loadAnuncios()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm">
+                <option value="">Repricer: Todos</option>
+                <option value="ativo">Repricer Ativo</option>
+                <option value="inativo">Repricer Inativo</option>
             </select>
         </div>
     </div>
@@ -223,8 +239,16 @@
                             <span class="text-red-400" x-text="formatMoney(anuncio.custo || 0)"></span>
                         </div>
                         <div class="flex justify-between text-xs mb-1">
-                            <span class="text-slate-400">Taxas</span>
+                            <span class="text-slate-400">Taxas (<span x-text="(anuncio.taxa_percent || 0).toFixed(0)"></span>%)</span>
                             <span class="text-amber-400" x-text="formatMoney(anuncio.taxas || 0)"></span>
+                        </div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-400">Impostos (<span x-text="(anuncio.imposto_percent || 0).toFixed(0)"></span>%)</span>
+                            <span class="text-orange-400" x-text="formatMoney(anuncio.imposto || 0)"></span>
+                        </div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-400">Frete</span>
+                            <span :class="(anuncio.frete || 0) > 0 ? 'text-cyan-400' : 'text-green-400'" x-text="(anuncio.frete || 0) > 0 ? formatMoney(anuncio.frete || 0) : 'Grátis'"></span>
                         </div>
                         <div class="border-t border-slate-600 mt-1 pt-1 flex justify-between text-xs">
                             <span class="text-slate-400">Lucro</span>
@@ -239,9 +263,20 @@
                     <div class="flex items-center justify-between">
                         <div class="flex gap-1">
                             <template x-if="anuncio.product_linked">
-                                <span class="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg text-xs" title="Vinculado">
-                                    <i class="fas fa-check-circle"></i>
-                                </span>
+                                <div class="flex items-center gap-1">
+                                    <span class="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg text-xs" title="Vinculado">
+                                        <i class="fas fa-check-circle"></i>
+                                    </span>
+                                    <span class="text-xs text-indigo-400" title="SKU do produto">
+                                        <i class="fas fa-barcode mr-1"></i><span x-text="anuncio.product_sku || 'N/A'"></span>
+                                    </span>
+                                    <button @click="openVincular(anuncio)" class="p-1 bg-amber-500/20 text-amber-400 rounded hover:bg-amber-500/30 text-xs" title="Trocar produto">
+                                        <i class="fas fa-exchange-alt"></i>
+                                    </button>
+                                    <button @click="desvincularProduto(anuncio)" class="p-1 bg-red-500/20 text-red-400 rounded hover:bg-red-500/30 text-xs" title="Desvincular">
+                                        <i class="fas fa-unlink"></i>
+                                    </button>
+                                </div>
                             </template>
                             <template x-if="!anuncio.product_linked && !anuncio.produto_id">
                                 <div class="flex gap-1">
@@ -255,11 +290,6 @@
                             </template>
                             <template x-if="!anuncio.product_linked && anuncio.produto_id">
                                 <button @click="openVincular(anuncio)" class="p-2 bg-amber-500/20 text-amber-400 rounded-lg hover:bg-amber-500/30 text-xs" title="Vincular a Produto">
-                                    <i class="fas fa-link"></i>
-                                </button>
-                            </template>
-                            <template x-if="!anuncio.product_linked && anuncio.produto_id">
-                                <button @click="openVincular(anuncio)" class="p-2 bg-amber-500/20 text-amber-400 rounded-lg hover:bg-amber-500/30" title="Vincular a Produto">
                                     <i class="fas fa-link"></i>
                                 </button>
                             </template>
@@ -381,9 +411,17 @@
                         <td class="px-4 py-3 text-center">
                             <div class="flex items-center justify-center gap-1">
                                 <template x-if="anuncio.product_linked">
-                                    <span class="text-xs bg-indigo-500/20 text-indigo-400 px-2 py-1 rounded">
-                                        <i class="fas fa-check-circle text-[10px]"></i>
-                                    </span>
+                                    <div class="flex items-center gap-1">
+                                        <span class="text-xs bg-indigo-500/20 text-indigo-400 px-2 py-1 rounded" title="SKU">
+                                            <i class="fas fa-barcode text-[10px] mr-1"></i><span x-text="anuncio.product_sku || 'N/A'"></span>
+                                        </span>
+                                        <button @click="openVincular(anuncio)" class="p-1 rounded text-amber-400 hover:bg-amber-500/10" title="Trocar">
+                                            <i class="fas fa-exchange-alt text-[10px]"></i>
+                                        </button>
+                                        <button @click="desvincularProduto(anuncio)" class="p-1 rounded text-red-400 hover:bg-red-500/10" title="Desvincular">
+                                            <i class="fas fa-unlink text-[10px]"></i>
+                                        </button>
+                                    </div>
                                 </template>
                                 <template x-if="!anuncio.product_linked && !anuncio.produto_id">
                                     <div class="flex items-center justify-center gap-1">
@@ -464,7 +502,19 @@
                             <div class="flex items-center justify-between">
                                 <div>
                                     <p class="font-medium text-white" x-text="produto.nome"></p>
-                                    <p class="text-sm text-slate-400">SKU: <span x-text="produto.sku || 'N/A'"></span></p>
+                                    <p class="text-sm text-slate-400">
+                                        SKU: <span x-text="produto.sku || 'N/A'"></span>
+                                        <template x-if="produto.has_variations">
+                                            <span class="ml-2 text-xs text-indigo-400">(<span x-text="produto.variations_count"></span> variações)</span>
+                                        </template>
+                                        <template x-if="produto.is_variation">
+                                            <span class="ml-2 text-xs text-indigo-400">
+                                                (Variação de: <span x-text="produto.parent_name"></span>
+                                                <span x-text="produto.variation_color ? ' - ' + produto.variation_color : ''"></span>
+                                                <span x-text="produto.variation_size ? ' - ' + produto.variation_size : ''"></span>)
+                                            </span>
+                                        </template>
+                                    </p>
                                 </div>
                                 <div class="text-right">
                                     <p class="font-bold text-yellow-400" x-text="formatMoney(produto.preco_venda)"></p>
@@ -562,6 +612,42 @@
                     </div>
                     <p class="text-xs text-slate-500 mt-1">Para garantir lucro mínimo por venda</p>
                 </div>
+                
+                <!-- Filtros -->
+                <div class="space-y-3 pt-2 border-t border-slate-700">
+                    <label class="flex items-center gap-3 p-3 bg-slate-900/50 rounded-lg border border-slate-700 cursor-pointer hover:border-indigo-500/50 transition">
+                        <input type="checkbox" x-model="repricerConfig.filter_full_only" class="rounded border-slate-600 text-indigo-500 focus:ring-indigo-500 bg-slate-800">
+                        <div class="flex-1">
+                            <div class="font-medium text-white text-sm">Apenas Full</div>
+                            <div class="text-xs text-slate-400">Competir apenas com anúncios do Mercado Livre Full (fulfillment)</div>
+                        </div>
+                    </label>
+                    
+                    <div>
+                        <label class="text-sm font-medium text-slate-300 block mb-2">Tipo de Anúncio do Concorrente</label>
+                        <div class="flex gap-2">
+                            <button type="button" 
+                                @click="repricerConfig.filter_type = 'todos'"
+                                :class="repricerConfig.filter_type === 'todos' ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'"
+                                class="flex-1 py-2 px-3 rounded-lg border-2 text-sm font-medium transition-all">
+                                Todos
+                            </button>
+                            <button type="button" 
+                                @click="repricerConfig.filter_type = 'classic'"
+                                :class="repricerConfig.filter_type === 'classic' ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'"
+                                class="flex-1 py-2 px-3 rounded-lg border-2 text-sm font-medium transition-all">
+                                <i class="fas fa-star mr-1"></i> Classic
+                            </button>
+                            <button type="button" 
+                                @click="repricerConfig.filter_type = 'premium'"
+                                :class="repricerConfig.filter_type === 'premium' ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'"
+                                class="flex-1 py-2 px-3 rounded-lg border-2 text-sm font-medium transition-all">
+                                <i class="fas fa-crown mr-1"></i> Premium
+                            </button>
+                        </div>
+                        <p class="text-xs text-slate-500 mt-1">Filtrar concorrentes por tipo de anúncio</p>
+                    </div>
+                </div>
                 <button @click="saveRepricerConfig()" :disabled="savingRepricer"
                     class="w-full py-2.5 bg-indigo-500 hover:bg-indigo-400 text-white rounded-lg font-medium flex items-center justify-center gap-2">
                     <i x-show="savingRepricer" class="fas fa-spinner fa-spin"></i>
@@ -585,6 +671,7 @@ function anunciosPage() {
         statusFilter: '',
         tipoFilter: '',
         vinculoFilter: '',
+        repricerFilter: '',
         search: '',
         anuncios: [],
         
@@ -602,7 +689,9 @@ function anunciosPage() {
             strategy: 'igualar_menor',
             offset_value: 0,
             min_profit_margin: null,
-            min_profit_type: 'percent'
+            min_profit_type: 'percent',
+            filter_full_only: false,
+            filter_type: 'todos'
         },
         savingRepricer: false,
         
@@ -646,6 +735,7 @@ function anunciosPage() {
                     status: this.statusFilter,
                     tipo: this.tipoFilter,
                     vinculo: this.vinculoFilter,
+                    repricer: this.repricerFilter,
                     search: this.search
                 });
                 
@@ -665,11 +755,37 @@ function anunciosPage() {
             try {
                 await fetch(`/api/anuncios/sync?empresa=${this.empresaId}`, { 
                     method: 'POST',
-                    headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+                    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }
                 });
                 await this.loadAnuncios();
             } catch (e) {
                 console.error('Sync error:', e);
+            }
+            this.syncing = false;
+        },
+        
+        async vincularPorSku() {
+            if (!confirm('Vincular produtos automaticamente pelo SKU? Apenas anúncios sem vínculo serão afetados.')) return;
+            
+            this.syncing = true;
+            try {
+                const response = await fetch(`/api/anuncios/vincular-por-sku?empresa=${this.empresaId}`, {
+                    method: 'POST',
+                    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }
+                });
+                const data = await response.json();
+                if (data.success) {
+                    alert(data.message);
+                    if (data.nao_encontrados > 0) {
+                        console.log('SKUs não encontrados:', data.skus_nao_encontrados);
+                    }
+                    await this.loadAnuncios();
+                } else {
+                    alert(data.message || 'Erro ao vincular');
+                }
+            } catch (e) {
+                console.error('Error:', e);
+                alert('Erro ao vincular produtos por SKU');
             }
             this.syncing = false;
         },
@@ -706,7 +822,7 @@ function anunciosPage() {
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                     },
                     body: JSON.stringify({ produto_id: produtoId })
                 });
@@ -723,6 +839,29 @@ function anunciosPage() {
             }
         },
         
+        async desvincularProduto(anuncio) {
+            if (!confirm('Desvincular este produto do anúncio?')) return;
+            
+            try {
+                const response = await fetch(`/api/anuncios/${anuncio.id}/desvincular`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                    }
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.loadAnuncios();
+                } else {
+                    alert(data.message || 'Erro ao desvincular');
+                }
+            } catch (e) {
+                console.error('Error:', e);
+                alert('Erro ao desvincular produto');
+            }
+        },
+        
         // Importar como produto
         async importAsProduct(anuncio) {
             if (!confirm('Criar produto a partir deste anúncio?')) return;
@@ -732,7 +871,7 @@ function anunciosPage() {
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                     }
                 });
                 const data = await response.json();
@@ -796,7 +935,7 @@ function anunciosPage() {
                     method: 'PUT',
                     headers: { 
                         'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                     },
                     body: JSON.stringify({ sku: this.editingSkuValue })
                 });
@@ -844,7 +983,7 @@ function anunciosPage() {
                     method: 'PUT',
                     headers: { 
                         'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                     },
                     body: JSON.stringify({ titulo: this.editingTituloValue })
                 });
@@ -882,18 +1021,26 @@ function anunciosPage() {
                 strategy: 'igualar_menor',
                 offset_value: 0,
                 min_profit_margin: null,
-                min_profit_type: 'percent'
+                min_profit_type: 'percent',
+                filter_full_only: false,
+                filter_type: 'todos'
             };
             try {
                 const response = await fetch(`/api/anuncios/${anuncio.id}/repricer`);
                 const data = await response.json();
                 if (data) {
+                    let filterType = 'todos';
+                    if (data.filter_classic_only) filterType = 'classic';
+                    else if (data.filter_premium_only) filterType = 'premium';
+                    
                     this.repricerConfig = {
                         is_active: data.is_active ?? false,
                         strategy: data.strategy ?? 'igualar_menor',
                         offset_value: data.offset_value ?? 0,
                         min_profit_margin: data.min_profit_margin ?? null,
-                        min_profit_type: data.min_profit_type ?? 'percent'
+                        min_profit_type: data.min_profit_type ?? 'percent',
+                        filter_full_only: data.filter_full_only ?? false,
+                        filter_type: filterType
                     };
                 }
             } catch (e) {
@@ -905,13 +1052,17 @@ function anunciosPage() {
         async saveRepricerConfig() {
             this.savingRepricer = true;
             try {
+                const config = { ...this.repricerConfig };
+                config.filter_classic_only = config.filter_type === 'classic';
+                config.filter_premium_only = config.filter_type === 'premium';
+                
                 const response = await fetch(`/api/anuncios/${this.repricerAnuncioId}/repricer`, {
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                     },
-                    body: JSON.stringify(this.repricerConfig)
+                    body: JSON.stringify(config)
                 });
                 const data = await response.json();
                 if (data.success) {

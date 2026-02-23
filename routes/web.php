@@ -44,6 +44,9 @@ Route::post('/webhooks/{source}', [\App\Http\Controllers\WebhookController::clas
 Route::get('/webhooks/health', [\App\Http\Controllers\WebhookController::class, 'health'])->name('webhooks.health');
 
 Route::middleware(['auth'])->group(function () {
+    // Upload de cookies para scraping
+    Route::post('/admin/integrations/upload-cookies', [\App\Http\Controllers\Admin\IntegracaoController::class, 'uploadCookies']);
+
     // Products
     Route::get('/products', function () {
         return view('products.list-alpine');
@@ -263,9 +266,12 @@ Route::prefix('api')->middleware('auth')->group(function () {
     Route::put('/anuncios/{id}', [App\Http\Controllers\Api\AnuncioController::class, 'update']);
     Route::post('/anuncios/sync', [App\Http\Controllers\Api\AnuncioController::class, 'sync']);
     Route::post('/anuncios/{id}/vincular', [App\Http\Controllers\Api\AnuncioController::class, 'vincular']);
+    Route::post('/anuncios/{id}/desvincular', [App\Http\Controllers\Api\AnuncioController::class, 'desvincular']);
+    Route::post('/anuncios/vincular-por-sku', [App\Http\Controllers\Api\AnuncioController::class, 'vincularPorSku']);
     Route::get('/anuncios/{id}/repricer', [App\Http\Controllers\Api\AnuncioController::class, 'getRepricerConfig']);
     Route::post('/anuncios/{id}/repricer', [App\Http\Controllers\Api\AnuncioController::class, 'saveRepricerConfig']);
     Route::post('/anuncios/{id}/importar', [App\Http\Controllers\Api\AnuncioController::class, 'importAsProduct']);
+    Route::get('/anuncios/{id}/repricer/logs', [App\Http\Controllers\Api\AnuncioController::class, 'getRepricerLogs']);
 
     Route::get('/orders', [App\Http\Controllers\Api\OrderController::class, 'index']);
     Route::get('/orders/{id}', [App\Http\Controllers\Api\OrderController::class, 'show']);

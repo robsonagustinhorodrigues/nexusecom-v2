@@ -62,28 +62,30 @@ class ProductController extends Controller
 
     public function store(Request $request)
     {
-        $empresaId = session('empresa_id', 6);
+        $empresaId = $request->input('empresa', session('empresa_id', 6));
         $empresa = \App\Models\Empresa::find($empresaId);
+        $grupoId = $empresa?->grupo_id;
 
         $validated = $request->validate([
             'nome' => 'required|min:3',
             'tipo' => 'required|in:simples,variacao,composto',
+            'sku' => 'required|unique:products,sku,null,id,grupo_id,'.$grupoId,
         ]);
 
         $slug = Str::slug($validated['nome']);
         $contador = 1;
-        while (Product::where('slug', $slug)->exists()) {
+        while (Product::where('slug', $slug)->where('grupo_id', $grupoId)->exists()) {
             $slug = Str::slug($validated['nome']).'-'.$contador;
             $contador++;
         }
 
         $product = Product::create([
             'empresa_id' => $empresaId,
-            'grupo_id' => $empresa?->grupo_id,
+            'grupo_id' => $grupoId,
             'nome' => $validated['nome'],
             'slug' => $slug,
             'marca' => $request->marca,
-            'sku' => $request->sku,
+            'sku' => $validated['sku'],
             'ean' => $request->ean,
             'descricao' => $request->descricao,
             'tipo' => $validated['tipo'],
@@ -99,27 +101,50 @@ class ProductController extends Controller
             'altura' => $request->altura ?? 0,
             'largura' => $request->largura ?? 0,
             'profundidade' => $request->profundidade ?? 0,
-            'estoque' => $request->estoque ?? 0,
             'ativo' => $request->ativo ?? true,
         ]);
 
         if ($validated['tipo'] === 'variacao' && $request->variations) {
+            $varCounter = 1;
             foreach ($request->variations as $var) {
-                Product::create([
-                    'empresa_id' => $empresaId,
-                    'grupo_id' => $empresa?->grupo_id,
+                $varNome = $var['nome'] ?? 'Variação '.$varCounter;
+                $varSlug = $slug.'-'.Str::slug($varNome);
+                $varSku = $var['sku'] ?? $validated['sku'].'-'.$varCounter;
+                $herdar = $var['herdar'] ?? true;
+
+                while (Product::where('slug', $varSlug)->where('grupo_id', $empresa?->grupo_id)->exists()) {
+                    $varSlug = $slug.'-'.Str::slug($varNome).'-'.$varCounter;
+                    $varCounter++;
+                }
+
+                $varData = [
+                    'empresa_id' => $product->empresa_id,
+                    'grupo_id' => $product->grupo_id, // Herdar grupo_id do pai
                     'parent_id' => $product->id,
-                    'nome' => $product->nome.' - '.($var['label'] ?? 'Variação'),
-                    'slug' => $slug.'-'.Str::slug($var['label'] ?? 'var'),
-                    'sku' => $var['sku'] ?? $product->sku.'-'.Str::slug($var['label'] ?? 'var'),
+                    'nome' => $product->nome.' - '.$varNome,
+                    'slug' => $varSlug,
+                    'sku' => $varSku,
                     'tipo' => 'simples',
-                    'preco_venda' => $var['preco_venda'] ?? $product->preco_venda,
-                    'preco_custo' => $var['preco_custo'] ?? $product->preco_custo,
-                    'estoque' => $var['estoque'] ?? 0,
                     'variation_color' => $var['color'] ?? null,
                     'variation_size' => $var['size'] ?? null,
+                    'herdar' => $herdar,
                     'ativo' => true,
-                ]);
+                ];
+
+                if (! $herdar) {
+                    $varData['preco_venda'] = $var['preco_venda'] ?? $product->preco_venda;
+                    $varData['preco_custo'] = $var['preco_custo'] ?? $product->preco_custo;
+                    $varData['marca'] = $var['marca'] ?? $product->marca;
+                    $varData['ncm'] = $var['ncm'] ?? $product->ncm;
+                } else {
+                    $varData['preco_venda'] = $product->preco_venda;
+                    $varData['preco_custo'] = $product->preco_custo;
+                    $varData['marca'] = $product->marca;
+                    $varData['ncm'] = $product->ncm;
+                }
+
+                Product::create($varData);
+                $varCounter++;
             }
         }
 
@@ -144,7 +169,7 @@ class ProductController extends Controller
 
     public function update(Request $request, $id)
     {
-        $empresaId = session('empresa_id', 6);
+        $empresaId = $request->input('empresa', session('empresa_id', 6));
         $empresa = \App\Models\Empresa::find($empresaId);
         $grupoId = $empresa?->grupo_id;
 
@@ -153,11 +178,12 @@ class ProductController extends Controller
         $validated = $request->validate([
             'nome' => 'required|min:3',
             'tipo' => 'required|in:simples,variacao,composto',
+            'sku' => 'required|unique:products,sku,'.$id.',id,grupo_id,'.$grupoId,
         ]);
 
         $slug = Str::slug($validated['nome']);
         $contador = 1;
-        while (Product::where('slug', $slug)->where('id', '!=', $id)->exists()) {
+        while (Product::where('slug', $slug)->where('id', '!=', $id)->where('grupo_id', $grupoId)->exists()) {
             $slug = Str::slug($validated['nome']).'-'.$contador;
             $contador++;
         }
@@ -182,37 +208,70 @@ class ProductController extends Controller
             'altura' => $request->altura ?? 0,
             'largura' => $request->largura ?? 0,
             'profundidade' => $request->profundidade ?? 0,
-            'estoque' => $request->estoque ?? 0,
             'ativo' => $request->ativo ?? true,
             'foto_principal' => $request->foto_principal ?? '',
             'fotos_galeria' => $request->fotos_galeria ?? [],
         ]);
 
-        // Handle variations (SKUs)
-        if ($validated['tipo'] === 'variacao' && $request->variations) {
-            // Delete existing variations
+        // Handle variations - DELETAR TODOS E RECRIAR
+        $tipo = $validated['tipo'];
+
+        if ($tipo === 'variacao') {
+            // Delete ALL existing variations (children)
             $product->variations()->delete();
 
-            foreach ($request->variations as $var) {
-                if (! empty($var['sku'])) {
-                    $product->variations()->create([
-                        'sku' => $var['sku'],
-                        'label' => $var['label'] ?? 'Variação',
+            // Create new variations if provided
+            if ($request->has('variations') && $request->variations) {
+                $varCounter = 1;
+                foreach ($request->variations as $var) {
+                    $varNome = $var['nome'] ?? 'Variação '.$varCounter;
+                    $varSlug = $slug.'-'.Str::slug($varNome);
+                    $varSku = $var['sku'] ?? $request->sku.'-'.$varCounter;
+                    $herdar = $var['herdar'] ?? true;
+
+                    while (Product::where('slug', $varSlug)->where('id', '!=', $product->id)->where('grupo_id', $grupoId)->exists()) {
+                        $varSlug = $slug.'-'.Str::slug($varNome).'-'.$varCounter;
+                        $varCounter++;
+                    }
+
+                    $varData = [
+                        'empresa_id' => $product->empresa_id,
+                        'grupo_id' => $product->grupo_id, // Herdar grupo_id do pai
+                        'parent_id' => $product->id,
+                        'nome' => $product->nome.' - '.$varNome,
+                        'slug' => $varSlug,
+                        'sku' => $varSku,
+                        'tipo' => 'simples',
                         'variation_color' => $var['color'] ?? null,
                         'variation_size' => $var['size'] ?? null,
-                        'preco_venda' => $var['preco_venda'] ?? 0,
-                        'preco_custo' => $var['preco_custo'] ?? 0,
-                        'estoque' => $var['estoque'] ?? 0,
-                        'grupo_id' => $grupoId,
-                    ]);
+                        'herdar' => $herdar,
+                        'ativo' => true,
+                    ];
+
+                    if (! $herdar) {
+                        $varData['preco_venda'] = $var['preco_venda'] ?? $product->preco_venda;
+                        $varData['preco_custo'] = $var['preco_custo'] ?? $product->preco_custo;
+                        $varData['marca'] = $var['marca'] ?? $product->marca;
+                        $varData['ncm'] = $var['ncm'] ?? $product->ncm;
+                    } else {
+                        $varData['preco_venda'] = $product->preco_venda;
+                        $varData['preco_custo'] = $product->preco_custo;
+                        $varData['marca'] = $product->marca;
+                        $varData['ncm'] = $product->ncm;
+                    }
+
+                    Product::create($varData);
+                    $varCounter++;
                 }
             }
         }
 
-        if ($validated['tipo'] === 'composto') {
+        // Handle composto
+        if ($tipo === 'composto') {
+            // Delete existing components first
             $product->components()->delete();
 
-            if ($request->components) {
+            if ($request->has('components') && $request->components) {
                 foreach ($request->components as $index => $comp) {
                     ProductComponent::create([
                         'product_id' => $product->id,

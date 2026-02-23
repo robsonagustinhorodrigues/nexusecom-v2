@@ -220,29 +220,6 @@
                     </div>
                 </div>
 
-                <!-- Stock -->
-                <div class="bg-slate-800 rounded-xl border border-slate-700 p-6">
-                    <h2 class="font-bold mb-4 flex items-center gap-2">
-                        <i class="fas fa-box text-blue-400"></i> Estoque
-                    </h2>
-                    
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm text-slate-400 mb-1">Quantidade</label>
-                            <input type="number" x-model="product.estoque" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 focus:border-indigo-500 focus:outline-none">
-                        </div>
-                        <div>
-                            <label class="block text-sm text-slate-400 mb-1">Unidade</label>
-                            <select x-model="product.unidade_medida" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 focus:border-indigo-500 focus:outline-none">
-                                <option value="UN">Unidade</option>
-                                <option value="KG">Kg</option>
-                                <option value="LT">Litro</option>
-                                <option value="MT">Metro</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- Dimensions -->
                 <div class="bg-slate-800 rounded-xl border border-slate-700 p-6">
                     <h2 class="font-bold mb-4 flex items-center gap-2">
@@ -307,22 +284,34 @@
                     
                     <div class="space-y-3">
                         <template x-for="(variation, index) in variations" :key="index">
-                            <div class="flex gap-3 items-center p-3 bg-slate-700 rounded-lg">
-                                <div class="flex-1">
-                                    <input type="text" x-model="variation.label" placeholder="Nome (ex: P, M, G)" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm">
+                            <div class="p-3 bg-slate-700 rounded-lg">
+                                <div class="flex gap-3 items-center mb-3">
+                                    <div class="flex-1">
+                                        <input type="text" x-model="variation.nome" placeholder="Nome (ex: Vermelho, P, G)" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm">
+                                    </div>
+                                    <div class="w-28">
+                                        <input type="text" x-model="variation.sku" placeholder="SKU" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm">
+                                    </div>
+                                    <div class="w-24">
+                                        <input type="text" x-model="variation.color" placeholder="Cor" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm">
+                                    </div>
+                                    <div class="w-20">
+                                        <input type="text" x-model="variation.size" placeholder="Tamanho" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm">
+                                    </div>
+                                    <button @click="removeVariation(index)" class="p-2 text-red-400 hover:text-red-300">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
                                 </div>
-                                <div class="w-24">
-                                    <input type="text" x-model="variation.sku" placeholder="SKU" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm">
+                                <div class="flex items-center gap-4">
+                                    <label class="flex items-center gap-2 cursor-pointer">
+                                        <input type="checkbox" x-model="variation.herdar" class="w-4 h-4 rounded text-indigo-600">
+                                        <span class="text-sm text-slate-400">Herdar atributos do pai</span>
+                                    </label>
                                 </div>
-                                <div class="w-28">
-                                    <input type="number" step="0.01" x-model="variation.preco_venda" placeholder="Preço" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm">
+                                <div x-show="!variation.herdar" class="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-slate-600">
+                                    <input type="number" step="0.01" x-model="variation.preco_venda" placeholder="Preço de Venda" class="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm">
+                                    <input type="number" step="0.01" x-model="variation.preco_custo" placeholder="Preço de Custo" class="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm">
                                 </div>
-                                <div class="w-20">
-                                    <input type="number" x-model="variation.estoque" placeholder="Estoque" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm">
-                                </div>
-                                <button @click="removeVariation(index)" class="p-2 text-red-400 hover:text-red-300">
-                                    <i class="fas fa-trash"></i>
-                                </button>
                             </div>
                         </template>
                         
@@ -477,7 +466,6 @@
                 preco_venda: 0,
                 preco_custo: 0,
                 custo_adicional: 0,
-                estoque: 0,
                 unidade_medida: 'UN',
                 peso: 0,
                 altura: 0,
@@ -550,7 +538,6 @@
                         preco_venda: data.preco_venda || 0,
                         preco_custo: data.preco_custo || 0,
                         custo_adicional: data.custo_adicional || 0,
-                        estoque: data.estoque || 0,
                         unidade_medida: data.unidade_medida || 'UN',
                         peso: data.peso || 0,
                         altura: data.altura || 0,
@@ -570,11 +557,14 @@
                     // Load variations (as child products)
                     if (data.variations) {
                         this.variations = data.variations.map(v => ({
-                            label: v.variation_color || v.variation_size || 'Variação',
+                            id: v.id,
+                            nome: v.nome ? v.nome.replace(data.nome + ' - ', '') : '',
                             sku: v.sku || '',
+                            color: v.variation_color || '',
+                            size: v.variation_size || '',
+                            herdar: v.herdar !== false,
                             preco_venda: v.preco_venda,
                             preco_custo: v.preco_custo || 0,
-                            estoque: v.estoque || 0,
                         }));
                     }
                     
@@ -612,11 +602,13 @@
             // Variations
             addVariation() {
                 this.variations.push({
-                    label: '',
+                    nome: '',
                     sku: '',
+                    color: '',
+                    size: '',
+                    herdar: true,
                     preco_venda: this.product.preco_venda,
                     preco_custo: this.product.preco_custo,
-                    estoque: 0,
                 });
             },
             
@@ -707,7 +699,7 @@
                         method: 'PUT',
                         headers: {
                             'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                         },
                         body: JSON.stringify({
                             ...this.product,

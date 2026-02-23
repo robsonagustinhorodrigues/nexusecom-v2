@@ -170,7 +170,7 @@ function tarefasPage() {
             try {
                 await fetch('/api/admin/tarefas/limpar', {
                     method: 'DELETE',
-                    headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+                    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }
                 });
                 await this.loadTasks();
             } catch (e) { console.error(e); }

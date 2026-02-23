@@ -87,6 +87,9 @@
                 <button @click="activeTab = 'basic'" :class="activeTab === 'basic' ? 'border-indigo-500 text-white' : 'border-transparent text-slate-500'" class="px-6 py-4 text-xs font-black uppercase italic tracking-widest border-b-2 transition-all">Dados Básicos</button>
                 <button @click="activeTab = 'fiscal'" :class="activeTab === 'fiscal' ? 'border-indigo-500 text-white' : 'border-transparent text-slate-500'" class="px-6 py-4 text-xs font-black uppercase italic tracking-widest border-b-2 transition-all">Fiscal & Impostos</button>
                 <button @click="activeTab = 'danfe'" :class="activeTab === 'danfe' ? 'border-indigo-500 text-white' : 'border-transparent text-slate-500'" class="px-6 py-4 text-xs font-black uppercase italic tracking-widest border-b-2 transition-all">Personalização DANFE</button>
+                <button @click="activeTab = 'repricer'" :class="activeTab === 'repricer' ? 'border-emerald-500 text-white' : 'border-transparent text-slate-500'" class="px-6 py-4 text-xs font-black uppercase italic tracking-widest border-b-2 transition-all">
+                    <i class="fas fa-dollar-sign mr-1"></i>Repricer
+                </button>
             </div>
 
             <!-- Modal Body (Scrollable) -->
@@ -206,6 +209,83 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Tab: Repricer -->
+                <div x-show="activeTab === 'repricer'" class="space-y-6">
+                    <div class="p-6 bg-slate-900/50 border border-slate-700 rounded-[2rem]">
+                        <div class="flex items-center justify-between mb-6">
+                            <h4 class="text-xs font-black text-white italic uppercase tracking-tighter flex items-center gap-2">
+                                <i class="fas fa-tags text-emerald-500"></i>
+                                Repricer Automático
+                            </h4>
+                            <label class="flex items-center gap-3 cursor-pointer">
+                                <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest italic">Ativar</span>
+                                <input type="checkbox" x-model="form.repricer_enabled" class="sr-only peer">
+                                <div class="relative w-11 h-6 bg-slate-700 rounded-full peer peer-checked:bg-emerald-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
+                            </label>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6" :class="form.repricer_enabled ? 'opacity-100' : 'opacity-40 pointer-events-none'">
+                            <div>
+                                <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 italic">Intervalo de Execução</label>
+                                <select x-model="form.repricer_intervalo_horas" class="w-full bg-slate-900 border border-slate-700 rounded-2xl px-5 py-3 text-white font-black italic focus:border-emerald-500 outline-none">
+                                    <option :value="1">A cada 1 hora</option>
+                                    <option :value="2">A cada 2 horas</option>
+                                    <option :value="3">A cada 3 horas</option>
+                                    <option :value="4">A cada 4 horas</option>
+                                    <option :value="6">A cada 6 horas</option>
+                                    <option :value="12">A cada 12 horas</option>
+                                    <option :value="24">Uma vez por dia</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 italic">Última Execução</label>
+                                <div class="w-full bg-slate-900 border border-slate-700 rounded-2xl px-5 py-3 text-slate-400 font-bold italic">
+                                    <span x-text="form.repricer_ultima_execucao ? new Date(form.repricer_ultima_execucao).toLocaleString('pt-BR') : 'Nunca executado'"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Configuração de Cookies do Mercado Livre -->
+                        <div class="mt-8 pt-6 border-t border-slate-700">
+                            <h5 class="text-[10px] font-black text-slate-400 uppercase tracking-widest italic mb-4 flex items-center gap-2">
+                                <i class="fab fa-mercadolivre text-yellow-500"></i>
+                                Cookies Mercado Livre (Scraping)
+                            </h5>
+                            
+                            <div class="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+                                <p class="text-[10px] text-slate-500 mb-4">
+                                    Os cookies são necessários para o Repricer acessar os preços dos concorrentes. 
+                                    Atualize quando expirarem.
+                                </p>
+                                
+                                <div class="flex items-center gap-4">
+                                    <label class="flex-1">
+                                        <input type="file" id="cookiesFile" accept=".json" 
+                                               class="hidden"
+                                               x-ref="cookiesFile"
+                                               @change="uploadCookies($refs.cookiesFile)">
+                                        <span class="inline-flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold italic rounded-xl cursor-pointer transition-colors">
+                                            <i class="fas fa-upload"></i>
+                                            Selecionar Arquivo
+                                        </span>
+                                    </label>
+                                    <span id="cookiesStatus" class="text-[10px] text-slate-400 font-bold italic">
+                                        Arquivo: não carregado
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-6 p-4 bg-slate-800/50 rounded-xl border border-slate-700/50">
+                            <p class="text-[10px] text-slate-500 font-bold italic">
+                                <i class="fas fa-info-circle mr-1 text-indigo-400"></i>
+                                O Repricer ajusta automaticamente os preços dos seus anúncios de catálogo no Mercado Livre para ficarem mais competitivos baseados nos concorrentes. 
+                                Configure a estratégia em cada anúncio individualmente.
+                            </p>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Modal Footer -->
@@ -244,7 +324,8 @@ function empresasPage() {
             regime_tributario: 'simples_nacional', aliquota_simples: 0, aliquota_icms: 0,
             auto_ciencia: false, certificado_senha: '', danfe_rodape: '',
             danfe_show_logo: true, danfe_show_itens: true, danfe_show_valor_itens: true,
-            danfe_show_valor_total: true, danfe_show_qrcode: true
+            danfe_show_valor_total: true, danfe_show_qrcode: true,
+            repricer_enabled: false, repricer_intervalo_horas: 3, repricer_ultima_execucao: null
         },
         
         async init() {
@@ -310,7 +391,7 @@ function empresasPage() {
             try {
                 const response = await fetch(url, {
                     method: method,
-                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
                     body: JSON.stringify(this.form)
                 });
                 
@@ -324,12 +405,60 @@ function empresasPage() {
             this.loading = false;
         },
 
+        async uploadCookies(fileInput) {
+            const file = fileInput.files[0];
+            if (!file) return;
+            
+            document.getElementById('cookiesStatus').textContent = 'Carregando...';
+            document.getElementById('cookiesStatus').classList.remove('text-emerald-400', 'text-red-400');
+            document.getElementById('cookiesStatus').classList.add('text-yellow-400');
+            
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const cookiesData = JSON.parse(e.target.result);
+                    
+                    const response = await fetch('/admin/integrations/upload-cookies', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                        },
+                        body: JSON.stringify({
+                            cookies: cookiesData,
+                            empresa_id: this.form.id
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Erro HTTP: ' + response.status);
+                    }
+                    
+                    const data = await response.json();
+                    console.log('Upload response:', data);
+                    document.getElementById('cookiesStatus').textContent = '✓ Arquivo carregado com sucesso!';
+                    document.getElementById('cookiesStatus').classList.remove('text-yellow-400');
+                    document.getElementById('cookiesStatus').classList.add('text-emerald-400');
+                } catch (err) {
+                    console.error('Upload error:', err);
+                    document.getElementById('cookiesStatus').textContent = '✗ Erro: ' + err.message;
+                    document.getElementById('cookiesStatus').classList.remove('text-yellow-400');
+                    document.getElementById('cookiesStatus').classList.add('text-red-400');
+                }
+            };
+            reader.onerror = function() {
+                document.getElementById('cookiesStatus').textContent = '✗ Erro ao ler arquivo';
+                document.getElementById('cookiesStatus').classList.add('text-red-400');
+            };
+            reader.readAsText(file);
+        },
+
         async deleteEmpresa(id) {
             if(!confirm('Deseja realmente REMOVER esta unidade? Todos os dados vinculados serão inacessíveis.')) return;
             try {
                 const response = await fetch(`/api/admin/empresas/${id}`, {
                     method: 'DELETE',
-                    headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+                    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }
                 });
                 if (response.ok) await this.loadEmpresas();
             } catch (e) { console.error(e); }

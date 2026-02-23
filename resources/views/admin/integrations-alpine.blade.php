@@ -224,7 +224,7 @@ function integrationsPage() {
             try {
                 const response = await fetch(`/integrations/${type}/test?empresa=${empresaId}`, { 
                     method: 'POST',
-                    headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+                    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }
                 });
                 const data = await response.json();
                 if (data.success) {
@@ -254,7 +254,7 @@ function integrationsPage() {
                 const empresaId = this.empresaId || localStorage.getItem('empresa_id') || 6;
                 const response = await fetch(`/integrations/${this.renameType}/update-nome?empresa=${empresaId}`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
                     body: JSON.stringify({ nome: this.renameValue })
                 });
                 if (response.ok) {

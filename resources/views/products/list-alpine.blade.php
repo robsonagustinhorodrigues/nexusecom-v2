@@ -212,7 +212,10 @@ function productsPage() {
             try {
                 const response = await fetch(`/api/products/${id}`, {
                     method: 'DELETE',
-                    headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                    }
                 });
                 if (response.ok) {
                     await this.loadProducts();
@@ -240,7 +243,7 @@ function productsPage() {
                 const response = await fetch(`/api/products/import?empresa=${empresaId}`, {
                     method: 'POST',
                     headers: {
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                     },
                     body: formData
                 });

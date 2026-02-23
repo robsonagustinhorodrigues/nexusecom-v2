@@ -94,7 +94,7 @@ function avisosPage() {
             try {
                 await fetch('/api/admin/notificacoes/marcar-lida', {
                     method: 'POST',
-                    headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+                    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }
                 });
                 await this.loadNotifications();
             } catch (e) { console.error(e); }
@@ -105,7 +105,7 @@ function avisosPage() {
             try {
                 await fetch('/api/admin/notificacoes/limpar', {
                     method: 'DELETE',
-                    headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+                    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }
                 });
                 this.notifications = [];
             } catch (e) { console.error(e); }
@@ -115,7 +115,7 @@ function avisosPage() {
             try {
                 await fetch(`/api/admin/notificacoes/${id}`, {
                     method: 'DELETE',
-                    headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+                    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }
                 });
                 this.notifications = this.notifications.filter(n => n.id !== id);
             } catch (e) { console.error(e); }
