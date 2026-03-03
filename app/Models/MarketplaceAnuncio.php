@@ -26,6 +26,8 @@ class MarketplaceAnuncio extends Model
         'frete_custo_seller',
         'frete_source',
         'frete_updated_at',
+        'closed_at',
+        'closed_reason',
     ];
 
     protected $casts = [
@@ -34,11 +36,22 @@ class MarketplaceAnuncio extends Model
         'estoque' => 'integer',
         'frete_custo_seller' => 'decimal:2',
         'frete_updated_at' => 'datetime',
+        'closed_at' => 'datetime',
     ];
 
     public function scopeTenant(Builder $query, ?int $empresaId): Builder
     {
         return $query->where('empresa_id', $empresaId ?? 0);
+    }
+
+    public function scopeAtivos(Builder $query): Builder
+    {
+        return $query->whereNull('closed_at');
+    }
+
+    public function scopeFechados(Builder $query): Builder
+    {
+        return $query->whereNotNull('closed_at');
     }
 
     public function empresa(): BelongsTo
@@ -70,6 +83,29 @@ class MarketplaceAnuncio extends Model
     {
         $jsonData = $this->json_data ?? [];
 
+        $imagens = $jsonData['pictures'] ?? [];
+        $thumbnail = $jsonData['thumbnail'] ?? null;
+
+        $fotoPrincipal = null;
+        $fotosGaleria = [];
+
+        if (! empty($imagens)) {
+            foreach ($imagens as $index => $pic) {
+                $url = $pic['url'] ?? $pic['secure_url'] ?? null;
+                if ($url) {
+                    if ($index === 0) {
+                        $fotoPrincipal = $url;
+                    } else {
+                        $fotosGaleria[] = $url;
+                    }
+                }
+            }
+        }
+
+        if (! $fotoPrincipal && $thumbnail) {
+            $fotoPrincipal = $thumbnail;
+        }
+
         $product = Product::create([
             'empresa_id' => $this->empresa_id,
             'nome' => $this->titulo,
@@ -81,7 +117,9 @@ class MarketplaceAnuncio extends Model
             'altura' => $jsonData['altura'] ?? null,
             'largura' => $jsonData['largura'] ?? null,
             'profundidade' => $jsonData['profundidade'] ?? null,
-            'imagem' => $jsonData['imagens'][0]['url'] ?? null,
+            'imagem' => $fotoPrincipal,
+            'foto_principal' => $fotoPrincipal,
+            'fotos_galeria' => $fotosGaleria,
             'tipo' => 'simples',
             'ativo' => $this->status === 'active',
         ]);

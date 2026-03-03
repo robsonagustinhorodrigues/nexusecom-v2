@@ -43,10 +43,11 @@ class ProductsExport implements FromCollection, WithHeadings
             'Categoria',
             'Descrição',
             'SKU Variação',
-            'SKU Variação Preço',
-            'SKU Variação Custo',
-            'SKU Variação Estoque',
-            'SKU Variação EAN',
+            'SKU 1',
+            'SKU 2',
+            'SKU 3',
+            'SKU 4',
+            'SKU 5',
         ];
     }
 
@@ -60,47 +61,48 @@ class ProductsExport implements FromCollection, WithHeadings
         $rows = [];
 
         foreach ($products as $product) {
-            $skus = $product->skus;
-
-            if ($skus->isEmpty()) {
-                $rows[] = $this->buildRow($product, null);
-            } else {
-                foreach ($skus as $sku) {
-                    $rows[] = $this->buildRow($product, $sku);
-                }
-            }
+            $rows[] = $this->buildRow($product);
         }
 
         return new Collection($rows);
     }
 
-    protected function buildRow($product, $sku): array
+    protected function buildRow($product): array
     {
+        $skus = $product->skus;
+
+        $sku1 = $skus->get(0)?->sku ?? '';
+        $sku2 = $skus->get(1)?->sku ?? '';
+        $sku3 = $skus->get(2)?->sku ?? '';
+        $sku4 = $skus->get(3)?->sku ?? '';
+        $sku5 = $skus->get(4)?->sku ?? '';
+
         return [
             $product->id,
             $product->sku,
             $product->nome,
             $product->tipo,
             $product->ativo ? 'Sim' : 'Não',
-            $sku ? $sku->preco_venda : $product->preco_venda,
-            $sku ? $sku->preco_custo : $product->preco_custo,
+            $product->preco_venda,
+            $product->preco_custo,
             $product->custo_adicional ?? 0,
-            $sku ? $sku->estoque : $product->estoque,
-            $sku ? $sku->gtin : $product->ean,
-            $sku ? $sku->ncm : $product->ncm,
+            $product->estoque ?? 0,
+            $product->ean,
+            $product->ncm,
             $product->cest,
             $product->marca,
-            $sku ? $sku->peso_g : ($product->peso * 1000),
+            $product->peso * 1000,
             $product->altura,
             $product->largura,
             $product->profundidade,
             $product->categoria?->nome,
-            strip_tags($product->descricao),
-            $sku?->sku ?? '',
-            $sku?->preco_venda ?? '',
-            $sku?->preco_custo ?? '',
-            $sku?->estoque ?? '',
-            $sku?->gtin ?? '',
+            strip_tags($product->descricao ?? ''),
+            '',
+            $sku1,
+            $sku2,
+            $sku3,
+            $sku4,
+            $sku5,
         ];
     }
 }

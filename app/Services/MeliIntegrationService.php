@@ -130,11 +130,19 @@ class MeliIntegrationService
 
             Log::info('Meli getOrders - seller: '.$sellerId.' params: '.json_encode($params));
 
+            $url = 'https://api.mercadolibre.com/orders/search';
+            $queryParams = array_merge([
+                'seller' => $sellerId,
+            ], $params);
+
+            Log::info('Meli getOrders - URL: '.$url.'?'.http_build_query($queryParams));
+
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer '.$token,
-            ])->get('https://api.mercadolibre.com/orders/search', array_merge([
-                'seller' => $sellerId,
-            ], $params));
+            ])->get($url, $queryParams);
+
+            Log::info('Meli getOrders - Status: '.$response->status());
+            Log::info('Meli getOrders - Response: '.$response->body());
 
             if ($response->successful()) {
                 return $response->json();
@@ -172,6 +180,106 @@ class MeliIntegrationService
             Log::error('Meli getOrderDetail exception: '.$e->getMessage());
 
             return ['error' => $e->getMessage()];
+        }
+    }
+
+    public function getItemDetails(string $itemId): array
+    {
+        $token = $this->getAccessToken();
+
+        if (! $token) {
+            return ['error' => 'Meli não conectado'];
+        }
+
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer '.$token,
+            ])->get("https://api.mercadolibre.com/items/{$itemId}");
+
+            if ($response->successful()) {
+                return $response->json();
+            }
+
+            return ['error' => $response->json() ?? 'Erro ao buscar item'];
+        } catch (\Exception $e) {
+            Log::error('Meli getItemDetails exception: '.$e->getMessage());
+
+            return ['error' => $e->getMessage()];
+        }
+    }
+
+    public function getOrderBillingInfo(string $orderId): array
+    {
+        $token = $this->getAccessToken();
+
+        if (! $token) {
+            return ['error' => 'Meli não conectado'];
+        }
+
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer '.$token,
+                'x-version' => '2',
+            ])->get("https://api.mercadolibre.com/orders/{$orderId}/billing_info");
+
+            if ($response->successful()) {
+                return $response->json();
+            }
+
+            return ['error' => $response->json() ?? 'Erro ao buscar billing info'];
+        } catch (\Exception $e) {
+            Log::error('Meli getOrderBillingInfo exception: '.$e->getMessage());
+
+            return ['error' => $e->getMessage()];
+        }
+    }
+
+    public function refreshOrder(int $orderId): array
+    {
+        if (! $this->isConnected()) {
+            return ['success' => false, 'message' => 'Meli não conectado'];
+        }
+
+        try {
+            $pedido = MarketplacePedido::find($orderId);
+
+            if (! $pedido) {
+                return ['success' => false, 'message' => 'Pedido não encontrado'];
+            }
+
+            Log::info("Meli refreshOrder - atualizando pedido ID: {$orderId}, ML ID: {$pedido->pedido_id}");
+
+            $orderData = $this->getOrderDetail($pedido->pedido_id);
+
+            if (isset($orderData['error'])) {
+                Log::error('Meli refreshOrder - erro ao buscar: '.$orderData['error']);
+
+                return ['success' => false, 'message' => $orderData['error']];
+            }
+
+            // Buscar thumbnails dos produtos
+            $orderItems = $orderData['order_items'] ?? [];
+            foreach ($orderItems as &$item) {
+                $itemId = $item['item']['id'] ?? null;
+                if ($itemId) {
+                    $itemDetails = $this->getItemDetails($itemId);
+                    if (! isset($itemDetails['error']) && ! empty($itemDetails)) {
+                        $item['item']['thumbnail'] = $itemDetails['thumbnail'] ?? null;
+                        $item['item']['picture'] = $itemDetails['pictures'][0]['url'] ?? $itemDetails['thumbnail'] ?? null;
+                    }
+                }
+            }
+            $orderData['order_items'] = $orderItems;
+
+            $this->updateOrderStatus($pedido, $orderData);
+
+            Log::info("Meli refreshOrder - pedido {$pedido->pedido_id} atualizado com sucesso");
+
+            return ['success' => true, 'message' => 'Pedido atualizado com sucesso'];
+        } catch (\Exception $e) {
+            Log::error('Meli refreshOrder exception: '.$e->getMessage());
+
+            return ['success' => false, 'message' => $e->getMessage()];
         }
     }
 
@@ -251,7 +359,7 @@ class MeliIntegrationService
         }
     }
 
-    public function syncOrders(int $limit = 1000): array
+    public function syncOrders(int $limit = 50): array
     {
         if (! $this->isConnected()) {
             return ['success' => false, 'message' => 'Meli não conectado'];
@@ -260,11 +368,15 @@ class MeliIntegrationService
         try {
             $imported = 0;
             $page = 0;
-            $maxPages = 20;
-            $maxOrders = 1000;
+            $maxPages = 5;
+            $maxOrders = 250;
+
+            Log::info('Meli syncOrders started - maxPages: '.$maxPages.' maxOrders: '.$maxOrders);
 
             while ($page < $maxPages && $imported < $maxOrders) {
                 $offset = $page * $limit;
+
+                Log::info('Meli syncOrders - fetching page '.$page.' offset '.$offset);
 
                 $result = $this->getOrders([
                     'limit' => $limit,
@@ -273,10 +385,14 @@ class MeliIntegrationService
                 ]);
 
                 if (isset($result['error'])) {
+                    Log::error('Meli syncOrders - error: '.$result['error']);
+
                     return ['success' => false, 'message' => $result['error']];
                 }
 
                 $orders = $result['results'] ?? [];
+
+                Log::info('Meli syncOrders - got '.count($orders).' orders on page '.$page);
 
                 if (empty($orders)) {
                     break;
@@ -294,9 +410,11 @@ class MeliIntegrationService
                 $page++;
             }
 
+            Log::info('Meli syncOrders completed - imported: '.$imported);
+
             return ['success' => true, 'message' => "{$imported} pedidos sincronizados"];
         } catch (\Exception $e) {
-            Log::error('Meli syncOrders error: '.$e->getMessage());
+            Log::error('Meli syncOrders exception: '.$e->getMessage().' - '.$e->getTraceAsString());
 
             return ['success' => false, 'message' => $e->getMessage()];
         }
@@ -335,6 +453,23 @@ class MeliIntegrationService
     {
         $integracao = $this->getIntegracao();
 
+        // Buscar dados detalhados do pedido para obter informações completas (nome, CPF, endereço)
+        $orderId = $orderData['id'] ?? null;
+        if ($orderId) {
+            $detailedOrder = $this->getOrderDetail($orderId);
+            if (! isset($detailedOrder['error']) && ! empty($detailedOrder)) {
+                Log::info("Meli processImport - obtendo dados detalhados do pedido {$orderId}");
+                $orderData = array_merge($orderData, $detailedOrder);
+            }
+
+            // Buscar informações de billing (CPF/CNPJ, endereço completo)
+            $billingInfo = $this->getOrderBillingInfo($orderId);
+            if (! isset($billingInfo['error']) && ! empty($billingInfo)) {
+                Log::info("Meli processImport - obtendo billing info do pedido {$orderId}");
+                $orderData['billing_info'] = $billingInfo;
+            }
+        }
+
         $buyer = $orderData['buyer'] ?? [];
         $shipping = $orderData['shipping'] ?? [];
         $payments = $orderData['payments'] ?? [];
@@ -366,6 +501,16 @@ class MeliIntegrationService
                     if ($shipmentStatus === 'shipped' || $shipmentStatus === 'delivered') {
                         $status = $statusMap[$shipmentStatus] ?? $shipmentStatus;
                     }
+                    // Adicionar dados do shipment ao orderData
+                    $orderData['shipment_details'] = [
+                        'mode' => $shipment['mode'] ?? null,
+                        'logistics_type' => $shipment['logistics_type'] ?? null,
+                        'status' => $shipment['status'] ?? null,
+                        'label' => $shipment['label'] ?? null,
+                        'label_pdf' => $shipment['label_pdf'] ?? null,
+                        'tracking_number' => $shipment['tracking_number'] ?? null,
+                        'tracking_url' => $shipment['tracking_url'] ?? null,
+                    ];
                 }
             }
         }
@@ -381,6 +526,40 @@ class MeliIntegrationService
         $taxaPagamento = $valorTotal * 0.029; // ~2.9% do Mercado Pago
         $valorLiquido = $valorTotal - $taxaPlatform - $taxaPagamento - $valorFrete;
 
+        // Buscar thumbnails dos produtos
+        $orderItems = $orderData['order_items'] ?? [];
+        foreach ($orderItems as &$item) {
+            $itemId = $item['item']['id'] ?? null;
+            if ($itemId) {
+                $itemDetails = $this->getItemDetails($itemId);
+                if (! isset($itemDetails['error']) && ! empty($itemDetails)) {
+                    $item['item']['thumbnail'] = $itemDetails['thumbnail'] ?? null;
+                    $item['item']['picture'] = $itemDetails['pictures'][0]['url'] ?? $itemDetails['thumbnail'] ?? null;
+                }
+            }
+        }
+        $orderData['order_items'] = $orderItems;
+
+        // Buscar informações de billing (CPF/CNPJ, endereço completo)
+        $billingInfo = $orderData['billing_info'] ?? [];
+        $billingBuyer = $billingInfo['buyer']['billing_info'] ?? [];
+        $billingAddress = $billingBuyer['address'] ?? [];
+        $identification = $billingBuyer['identification'] ?? [];
+
+        // Determinar se é CPF ou CNPJ
+        $docType = $identification['type'] ?? '';
+        $docNumber = $identification['number'] ?? null;
+
+        $compradorNome = $billingBuyer['name'] ?? ($buyer['first_name'] ?? '');
+        $compradorSobrenome = $billingBuyer['last_name'] ?? ($buyer['last_name'] ?? '');
+
+        // Endereço do billing
+        $enderecoRua = $billingAddress['street_name'] ?? '';
+        $enderecoNumero = $billingAddress['street_number'] ?? '';
+        $enderecoCidade = $billingAddress['city_name'] ?? '';
+        $enderecoEstado = isset($billingAddress['state']) ? ($billingAddress['state']['name'] ?? $billingAddress['state']) : '';
+        $enderecoCep = $billingAddress['zip_code'] ?? '';
+
         $pedido = MarketplacePedido::updateOrCreate(
             [
                 'empresa_id' => $this->empresaId,
@@ -393,15 +572,15 @@ class MeliIntegrationService
                 'status' => $status,
                 'status_pagamento' => $status,
                 'status_envio' => $shipping['status'] ?? null,
-                'comprador_nome' => ($buyer['first_name'] ?? '').' '.($buyer['last_name'] ?? ''),
+                'comprador_nome' => trim($compradorNome.' '.$compradorSobrenome),
                 'comprador_email' => $buyer['email'] ?? null,
-                'comprador_cpf' => isset($buyer['billing_info']) ? ($buyer['billing_info']['doc_number'] ?? null) : null,
-                'comprador_cnpj' => null,
+                'comprador_cpf' => ($docType === 'CPF' || $docType === 'DNI' || $docType === 'NIRE' || $docType === 'CUIT') ? $docNumber : null,
+                'comprador_cnpj' => ($docType === 'CNPJ' || $docType === 'JDE') ? $docNumber : null,
                 'telefone' => $buyer['phone'] ?? null,
-                'endereco' => ($shippingAddress['address_line'] ?? '').', '.($shippingAddress['street_number'] ?? ''),
-                'cidade' => isset($shippingAddress['city']) ? ($shippingAddress['city']['name'] ?? $shippingAddress['city']) : null,
-                'estado' => isset($shippingAddress['state']) ? ($shippingAddress['state']['name'] ?? $shippingAddress['state']) : null,
-                'cep' => $shippingAddress['zip_code'] ?? null,
+                'endereco' => $enderecoRua.($enderecoNumero ? ', '.$enderecoNumero : ''),
+                'cidade' => $enderecoCidade ?: (isset($shippingAddress['city']) ? ($shippingAddress['city']['name'] ?? $shippingAddress['city']) : null),
+                'estado' => $enderecoEstado ?: (isset($shippingAddress['state']) ? ($shippingAddress['state']['name'] ?? $shippingAddress['state']) : null),
+                'cep' => $enderecoCep ?: ($shippingAddress['zip_code'] ?? null),
                 'valor_total' => $valorTotal,
                 'valor_frete' => $valorFrete,
                 'valor_desconto' => $valorDesconto,

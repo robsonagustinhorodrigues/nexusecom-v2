@@ -41,21 +41,25 @@ class ProductsImport implements ToCollection
                 $ativo = strtolower(trim($row[4] ?? 'sim')) === 'sim';
                 $precoVenda = floatval($row[5] ?? 0);
                 $precoCusto = floatval($row[6] ?? 0);
-                $estoque = intval($row[7] ?? 0);
-                $ean = trim($row[8] ?? '');
-                $ncm = trim($row[9] ?? '');
-                $cest = trim($row[10] ?? '');
-                $marca = trim($row[11] ?? '');
-                $peso = floatval($row[12] ?? 0);
-                $altura = floatval($row[13] ?? 0);
-                $largura = floatval($row[14] ?? 0);
-                $profundidade = floatval($row[15] ?? 0);
-                $categoriaNome = trim($row[16] ?? '');
-                $descricao = trim($row[17] ?? '');
-                $skuVariacao = trim($row[18] ?? '');
-                $skuVariacaoPreco = floatval($row[19] ?? 0);
-                $skuVariacaoEstoque = intval($row[20] ?? 0);
-                $skuVariacaoEan = trim($row[21] ?? '');
+                $custoAdicional = floatval($row[7] ?? 0);
+                $estoque = intval($row[8] ?? 0);
+                $ean = trim($row[9] ?? '');
+                $ncm = trim($row[10] ?? '');
+                $cest = trim($row[11] ?? '');
+                $marca = trim($row[12] ?? '');
+                $peso = floatval($row[13] ?? 0);
+                $altura = floatval($row[14] ?? 0);
+                $largura = floatval($row[15] ?? 0);
+                $profundidade = floatval($row[16] ?? 0);
+                $categoriaNome = trim($row[17] ?? '');
+                $descricao = trim($row[18] ?? '');
+                $skuVariacao = trim($row[19] ?? '');
+
+                $sku1 = trim($row[20] ?? '');
+                $sku2 = trim($row[21] ?? '');
+                $sku3 = trim($row[22] ?? '');
+                $sku4 = trim($row[23] ?? '');
+                $sku5 = trim($row[24] ?? '');
 
                 if (empty($nome) && empty($sku)) {
                     $errors[] = 'Linha '.($index + 2).': SKU e Nome vazios';
@@ -95,6 +99,10 @@ class ProductsImport implements ToCollection
                         'largura' => $largura ?: $product->largura,
                         'profundidade' => $profundidade ?: $product->profundidade,
                         'descricao' => $descricao ?: $product->descricao,
+                        'preco_venda' => $precoVenda ?: $product->preco_venda,
+                        'preco_custo' => $precoCusto ?: $product->preco_custo,
+                        'custo_adicional' => $custoAdicional ?: $product->custo_adicional,
+                        'estoque' => $estoque ?: $product->estoque,
                     ]);
 
                     if (! empty($sku) && $product->sku !== $sku) {
@@ -103,40 +111,37 @@ class ProductsImport implements ToCollection
                     }
 
                     if (! empty($skuVariacao)) {
-                        $skuModel = ProductSku::updateOrCreate(
+                        ProductSku::updateOrCreate(
                             [
                                 'product_id' => $product->id,
                                 'sku' => $skuVariacao,
                             ],
                             [
-                                'preco_venda' => $skuVariacaoPreco ?: $precoVenda,
-                                'preco_custo' => $precoCusto,
-                                'estoque' => $skuVariacaoEstoque ?: $estoque,
-                                'gtin' => $skuVariacaoEan ?: $ean,
-                                'ncm' => $ncm,
-                            ]
-                        );
-                    } else {
-                        $existingSku = $product->skus()->where('is_principal', true)->first();
-                        if ($existingSku) {
-                            $existingSku->update([
-                                'preco_venda' => $precoVenda ?: $existingSku->preco_venda,
-                                'preco_custo' => $precoCusto ?: $existingSku->preco_custo,
-                                'estoque' => $estoque ?: $existingSku->estoque,
-                                'gtin' => $ean ?: $existingSku->gtin,
-                                'ncm' => $ncm ?: $existingSku->ncm,
-                            ]);
-                        } else {
-                            ProductSku::create([
-                                'product_id' => $product->id,
-                                'sku' => $sku,
-                                'is_principal' => true,
                                 'preco_venda' => $precoVenda,
                                 'preco_custo' => $precoCusto,
                                 'estoque' => $estoque,
                                 'gtin' => $ean,
                                 'ncm' => $ncm,
-                            ]);
+                            ]
+                        );
+                    }
+
+                    $skuList = array_filter([$sku1, $sku2, $sku3, $sku4, $sku5]);
+                    foreach ($skuList as $skuValue) {
+                        if (! empty($skuValue)) {
+                            ProductSku::firstOrCreate(
+                                [
+                                    'product_id' => $product->id,
+                                    'sku' => $skuValue,
+                                ],
+                                [
+                                    'preco_venda' => $precoVenda,
+                                    'preco_custo' => $precoCusto,
+                                    'estoque' => $estoque,
+                                    'gtin' => $ean,
+                                    'ncm' => $ncm,
+                                ]
+                            );
                         }
                     }
 
@@ -144,7 +149,7 @@ class ProductsImport implements ToCollection
                 } else {
                     $slug = Str::slug($nome);
                     $contador = 1;
-                    while (Product::where('slug', $slug)->exists()) {
+                    while (Product::where('slug', $slug)->where('grupo_id', $this->grupoId)->exists()) {
                         $slug = Str::slug($nome).'-'.$contador;
                         $contador++;
                     }
@@ -167,6 +172,9 @@ class ProductsImport implements ToCollection
                         'profundidade' => $profundidade,
                         'descricao' => $descricao,
                         'preco_venda' => $precoVenda,
+                        'preco_custo' => $precoCusto,
+                        'custo_adicional' => $custoAdicional,
+                        'estoque' => $estoque,
                     ]);
 
                     if (! empty($skuVariacao)) {
@@ -174,10 +182,10 @@ class ProductsImport implements ToCollection
                             'product_id' => $product->id,
                             'sku' => $skuVariacao,
                             'is_principal' => true,
-                            'preco_venda' => $skuVariacaoPreco ?: $precoVenda,
+                            'preco_venda' => $precoVenda,
                             'preco_custo' => $precoCusto,
-                            'estoque' => $skuVariacaoEstoque ?: $estoque,
-                            'gtin' => $skuVariacaoEan ?: $ean,
+                            'estoque' => $estoque,
+                            'gtin' => $ean,
                             'ncm' => $ncm,
                         ]);
                     } else {
@@ -191,6 +199,25 @@ class ProductsImport implements ToCollection
                             'gtin' => $ean,
                             'ncm' => $ncm,
                         ]);
+                    }
+
+                    $skuList = array_filter([$sku1, $sku2, $sku3, $sku4, $sku5]);
+                    foreach ($skuList as $skuValue) {
+                        if (! empty($skuValue)) {
+                            ProductSku::firstOrCreate(
+                                [
+                                    'product_id' => $product->id,
+                                    'sku' => $skuValue,
+                                ],
+                                [
+                                    'preco_venda' => $precoVenda,
+                                    'preco_custo' => $precoCusto,
+                                    'estoque' => $estoque,
+                                    'gtin' => $ean,
+                                    'ncm' => $ncm,
+                                ]
+                            );
+                        }
                     }
 
                     $created++;

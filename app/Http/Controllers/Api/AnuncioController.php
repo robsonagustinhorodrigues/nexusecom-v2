@@ -14,6 +14,7 @@ class AnuncioController extends Controller
         $empresaId = $request->get('empresa', $request->get('empresa_id', session('empresa_id', 6)));
 
         $query = MarketplaceAnuncio::where('empresa_id', $empresaId)
+            ->whereNull('closed_at') // Excluir anúncios fechados/excluídos do ML
             ->with(['product', 'productSku', 'productSku.product', 'repricerConfig']);
 
         if ($request->marketplace) {

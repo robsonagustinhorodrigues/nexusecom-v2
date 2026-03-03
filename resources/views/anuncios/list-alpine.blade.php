@@ -25,7 +25,7 @@
             
             <div x-data="{ open: false }" class="relative">
                 <button @click="open = !open" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-bold text-sm flex items-center gap-2">
-                    <i class="fas fa-ellipsis-h"></i>
+                    <i class="fas fa-ellipsis-v"></i>
                 </button>
                 <div x-show="open" @click.away="open = false" class="absolute right-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden">
                     <button @click="syncAnuncios(); open = false" :disabled="syncing" class="w-full px-4 py-3 text-left text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2">

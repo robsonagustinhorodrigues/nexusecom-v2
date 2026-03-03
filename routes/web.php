@@ -274,9 +274,15 @@ Route::prefix('api')->middleware('auth')->group(function () {
     Route::get('/anuncios/{id}/repricer/logs', [App\Http\Controllers\Api\AnuncioController::class, 'getRepricerLogs']);
 
     Route::get('/orders', [App\Http\Controllers\Api\OrderController::class, 'index']);
+    Route::get('/orders/integrations', [App\Http\Controllers\Api\OrderController::class, 'integrations']);
+    Route::post('/orders/sync', [App\Http\Controllers\Api\OrderController::class, 'sync']);
+    Route::post('/orders/{id}/refresh', [App\Http\Controllers\Api\OrderController::class, 'refresh']);
     Route::get('/orders/{id}', [App\Http\Controllers\Api\OrderController::class, 'show']);
     Route::put('/orders/{id}', [App\Http\Controllers\Api\OrderController::class, 'update']);
-    Route::post('/orders/sync', [App\Http\Controllers\Api\OrderController::class, 'sync']);
+    Route::get('/orders/{id}/danfe', [App\Http\Controllers\Api\OrderController::class, 'danfe']);
+    Route::get('/orders/{id}/danfe-simplificada', [App\Http\Controllers\Api\OrderController::class, 'danfeSimplificada']);
+    Route::get('/orders/{id}/etiqueta', [App\Http\Controllers\Api\OrderController::class, 'etiqueta']);
+    Route::get('/orders/{id}/etiqueta-meli', [App\Http\Controllers\Api\OrderController::class, 'etiquetaMeli']);
 
     Route::get('/nfes', [App\Http\Controllers\Api\NfeController::class, 'index']);
     Route::get('/nfes/{id}', [App\Http\Controllers\Api\NfeController::class, 'show']);

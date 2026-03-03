@@ -153,9 +153,26 @@ class MeliService
                             'status' => $data['status'],
                             'url_anuncio' => $data['permalink'],
                             'json_data' => $data,
+                            // Se voltou a ter status active, reabrir
+                            'closed_at' => $data['status'] === 'active' ? null : ($data['status'] === 'closed' ? now() : null),
+                            'closed_reason' => $data['status'] === 'active' ? null : ($data['status'] === 'closed' ? 'ml_closed' : null),
                         ]
                     );
                 }
+            }
+
+            // 3. Marcar como fechados os anúncios que não existem mais no ML
+            $fechados = MarketplaceAnuncio::where('integracao_id', $integracao->id)
+                ->whereNotIn('external_id', $itemIds)
+                ->whereNull('closed_at')
+                ->update([
+                    'status' => 'closed',
+                    'closed_at' => now(),
+                    'closed_reason' => 'ml_excluded',
+                ]);
+
+            if ($fechados > 0) {
+                Log::info("MeliService: {$fechados} anúncios marcados como fechados (não existem mais no ML)");
             }
 
             return count($itemIds);
