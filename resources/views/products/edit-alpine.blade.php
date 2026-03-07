@@ -277,9 +277,39 @@
                         <h2 class="font-bold flex items-center gap-2">
                             <i class="fas fa-layer-group text-amber-400"></i> Variações
                         </h2>
-                        <button @click="addVariation()" class="px-3 py-1 bg-indigo-600 rounded-lg text-sm">
-                            <i class="fas fa-plus"></i> Adicionar
+                        <button @click="addVariation()" class="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm transition">
+                            <i class="fas fa-plus"></i> Criar Variação Nova
                         </button>
+                    </div>
+
+                    <!-- Search Existing Product for Variation -->
+                    <div class="mb-4 relative">
+                        <label class="block text-sm text-slate-400 mb-1">Buscar Produto Existente</label>
+                        <input 
+                            type="text" 
+                            x-model="variationSearch"
+                            @keyup.debounce.300ms="searchVariations()"
+                            placeholder="Buscar por nome ou SKU para vincular como variação..."
+                            class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                        >
+                        <div x-show="variationResults.length > 0" class="absolute z-10 w-full mt-1 bg-slate-800 border-2 border-slate-600 rounded-lg shadow-xl max-h-48 overflow-auto">
+                            <template x-for="result in variationResults" :key="result.id">
+                                <button 
+                                    @click="addVariationProduct(result)"
+                                    class="w-full text-left px-4 py-3 hover:bg-slate-700 border-b border-slate-700 last:border-0 flex justify-between items-center transition"
+                                >
+                                    <div>
+                                        <div class="font-medium text-white" x-text="result.nome"></div>
+                                        <div class="text-xs text-slate-400 mt-1">
+                                            SKU: <span x-text="result.sku"></span> 
+                                        </div>
+                                    </div>
+                                    <div class="text-indigo-400 font-medium">
+                                        R$ <span x-text="result.preco_venda"></span>
+                                    </div>
+                                </button>
+                            </template>
+                        </div>
                     </div>
                     
                     <div class="space-y-3">
@@ -308,9 +338,25 @@
                                         <span class="text-sm text-slate-400">Herdar atributos do pai</span>
                                     </label>
                                 </div>
+                                <div x-show="variation.herdar" class="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-slate-600 opacity-60">
+                                    <div class="relative">
+                                        <span class="absolute left-2 text-xs top-[-8px] bg-slate-700 px-1 text-slate-400">Preço de Venda (Herdado)</span>
+                                        <input type="text" :value="formatMoney(product.preco_venda)" readonly class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-400 cursor-not-allowed">
+                                    </div>
+                                    <div class="relative">
+                                        <span class="absolute left-2 text-xs top-[-8px] bg-slate-700 px-1 text-slate-400">Preço de Custo (Herdado)</span>
+                                        <input type="text" :value="formatMoney(product.preco_custo)" readonly class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-400 cursor-not-allowed">
+                                    </div>
+                                </div>
                                 <div x-show="!variation.herdar" class="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-slate-600">
-                                    <input type="number" step="0.01" x-model="variation.preco_venda" placeholder="Preço de Venda" class="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm">
-                                    <input type="number" step="0.01" x-model="variation.preco_custo" placeholder="Preço de Custo" class="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm">
+                                    <div class="relative">
+                                        <span class="absolute left-2 text-xs top-[-8px] bg-slate-700 px-1 text-indigo-400">Preço de Venda</span>
+                                        <input type="number" step="0.01" x-model="variation.preco_venda" placeholder="0.00" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm focus:border-indigo-500">
+                                    </div>
+                                    <div class="relative">
+                                        <span class="absolute left-2 text-xs top-[-8px] bg-slate-700 px-1 text-indigo-400">Preço de Custo</span>
+                                        <input type="number" step="0.01" x-model="variation.preco_custo" placeholder="0.00" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm focus:border-indigo-500">
+                                    </div>
                                 </div>
                             </div>
                         </template>
@@ -408,7 +454,10 @@
                             <div class="flex gap-3 items-center p-3 bg-slate-700 rounded-lg">
                                 <div class="flex-1">
                                     <div class="font-medium" x-text="comp.nome"></div>
-                                    <div class="text-xs text-slate-400">SKU: <span x-text="comp.sku"></span></div>
+                                    <div class="flex gap-4 text-xs text-slate-400">
+                                        <span>SKU: <span x-text="comp.sku"></span></span>
+                                        <span>Estoque Disponível: <span x-text="comp.estoque" class="font-medium text-slate-300"></span></span>
+                                    </div>
                                 </div>
                                 <div class="w-16">
                                     <input type="number" min="1" x-model="comp.quantity" class="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-sm">
@@ -482,6 +531,10 @@
             variations: [],
             skus: [],
             components: [],
+            
+            // Variation Search
+            variationSearch: '',
+            variationResults: [],
             
             // Compound search
             componentSearch: '',
@@ -569,16 +622,21 @@
                     }
                     
                     // Load components
-                    if (data.components) {
-                        this.components = data.components.map(c => ({
-                            product_id: c.component_product_id,
-                            nome: c.component_product?.nome || 'Produto',
-                            sku: c.component_product?.sku || '',
-                            quantity: c.quantity,
-                            unit_price: c.unit_price,
-                            preco_venda: c.component_product?.preco_venda || 0,
-                        }));
-                    }
+                        this.components = data.components.map(c => {
+                            let estoque = 0;
+                            if (c.component_product?.skus && c.component_product.skus.length > 0) {
+                                estoque = c.component_product.skus.reduce((sum, sku) => sum + (sku.estoque || 0), 0);
+                            }
+                            return {
+                                product_id: c.component_product_id,
+                                nome: c.component_product?.nome || 'Produto',
+                                sku: c.component_product?.sku || '',
+                                quantity: c.quantity,
+                                unit_price: c.unit_price,
+                                preco_venda: c.component_product?.preco_venda || 0,
+                                estoque: estoque,
+                            };
+                        });
                     
                     // Load SKUs
                     if (data.skus) {
@@ -614,6 +672,44 @@
             
             removeVariation(index) {
                 this.variations.splice(index, 1);
+            },
+            
+            async searchVariations() {
+                if (this.variationSearch.length < 2) {
+                    this.variationResults = [];
+                    return;
+                }
+                
+                try {
+                    const response = await fetch(`/api/products/search?q=${encodeURIComponent(this.variationSearch)}`);
+                    let results = await response.json();
+                    
+                    // Ocultar resultados que já existem no array variations e ocultar ele mesmo (se for salvamento de existente)
+                    this.variationResults = results.filter(r => 
+                        !this.variations.some(v => v.id === r.id) && r.id != this.productId
+                    );
+                } catch (e) {
+                    console.error('Error searching variations:', e);
+                }
+            },
+            
+            addVariationProduct(product) {
+                if (this.variations.find(v => v.id === product.id)) return;
+                
+                // Tratar atributos vazios pra não sobrepor os valores do banco se herdar for falso
+                this.variations.push({
+                    id: product.id,
+                    nome: product.nome.replace(this.product.nome + ' - ', ''), // Tentar limpar o nome prefixado se houver
+                    sku: product.sku,
+                    color: product.variation_color || '',
+                    size: product.variation_size || '',
+                    herdar: true,
+                    preco_venda: product.preco_venda || this.product.preco_venda,
+                    preco_custo: product.preco_custo || this.product.preco_custo,
+                });
+                
+                this.variationSearch = '';
+                this.variationResults = [];
             },
             
             // SKUs
@@ -666,6 +762,7 @@
                     quantity: 1,
                     unit_price: product.preco_venda,
                     preco_venda: product.preco_venda,
+                    estoque: product.estoque || 0,
                 });
                 
                 this.componentSearch = '';
@@ -685,8 +782,13 @@
             
             get maxCompoundStock() {
                 if (this.components.length === 0) return 0;
-                // Simplified - in real app would check actual stock
-                return 0;
+                
+                let limits = this.components.map(c => {
+                    if (c.quantity <= 0) return 0;
+                    return Math.floor(c.estoque / c.quantity);
+                });
+                
+                return Math.min(...limits);
             },
             
             async save() {

@@ -128,15 +128,8 @@ class BuscarNfeJob implements ShouldQueue
             $tipo,
             $titulo,
             $mensagem,
+            $falha > 0 ? 'warning' : 'success',
             route('fiscal.monitor'),
-            [
-                'tarefa_id' => $this->tarefaId,
-                'log_path' => $logPath,
-                'log_filename' => $logFileName,
-                'empresa_id' => $empresa->id,
-                'empresa_nome' => $empresa->nome,
-                'nfe_processadas' => $nfeProcessadas,
-            ],
             $this->userId
         );
     }
@@ -158,8 +151,8 @@ class BuscarNfeJob implements ShouldQueue
             'error',
             'Erro na Consulta SEFAZ',
             'Ocorreu um erro ao consultar o SEFAZ para '.($empresa->nome ?? 'empresa desconhecida').': '.$exception->getMessage(),
+            'danger',
             '/fiscal/monitor',
-            ['tarefa_id' => $this->tarefaId],
             $this->userId
         );
     }

@@ -89,6 +89,11 @@ class MarketplacePedido extends Model
         return $this->belongsTo(Cliente::class, 'cliente_id');
     }
 
+    public function nfeEmitida()
+    {
+        return $this->hasOne(NfeEmitida::class, 'pedido_marketplace', 'pedido_id');
+    }
+
     public function scopeTenant($query, int $empresaId)
     {
         return $query->where('empresa_id', $empresaId);

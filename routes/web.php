@@ -234,7 +234,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/integrations/bling/processar-notificacoes', [\App\Http\Controllers\BlingController::class, 'processarNotificacoes'])->name('bling.processar-notificacoes');
 
     Route::get('/integrations/amazon/connect', [\App\Http\Controllers\AmazonController::class, 'showConnectForm'])->name('amazon.connect');
-    Route::post('/integrations/amazon/connect', [\App\Http\Controllers\AmazonController::class, 'connect'])->name('amazon.connect');
+    Route::post('/integrations/amazon/connect', [\App\Http\Controllers\AmazonController::class, 'connect'])->name('amazon.connect.post');
     Route::post('/integrations/amazon/disconnect', [\App\Http\Controllers\AmazonController::class, 'disconnect'])->name('amazon.disconnect');
     Route::post('/integrations/amazon/update-nome', [\App\Http\Controllers\AmazonController::class, 'updateNome'])->name('amazon.update-nome');
     Route::post('/integrations/amazon/test', [\App\Http\Controllers\AmazonController::class, 'testConnection'])->name('amazon.test');
@@ -283,6 +283,7 @@ Route::prefix('api')->middleware('auth')->group(function () {
     Route::get('/orders/{id}/danfe-simplificada', [App\Http\Controllers\Api\OrderController::class, 'danfeSimplificada']);
     Route::get('/orders/{id}/etiqueta', [App\Http\Controllers\Api\OrderController::class, 'etiqueta']);
     Route::get('/orders/{id}/etiqueta-meli', [App\Http\Controllers\Api\OrderController::class, 'etiquetaMeli']);
+    Route::post('/orders/link-item', [App\Http\Controllers\Api\OrderController::class, 'linkItem']);
 
     Route::get('/nfes', [App\Http\Controllers\Api\NfeController::class, 'index']);
     Route::get('/nfes/{id}', [App\Http\Controllers\Api\NfeController::class, 'show']);

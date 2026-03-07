@@ -148,6 +148,24 @@ class MeliIntegrationService
                 return $response->json();
             }
 
+            // Retry if token expired prematurely
+            if ($response->status() === 401) {
+                Log::warning('Meli getOrders - 401 Unauthorized. Tentando refreshToken...');
+                if ($this->refreshToken()) {
+                    $integracao->refresh();
+                    $token = $integracao->access_token;
+                    
+                    $response = Http::withHeaders([
+                        'Authorization' => 'Bearer '.$token,
+                    ])->get($url, $queryParams);
+                    
+                    if ($response->successful()) {
+                        Log::info('Meli getOrders - Retry bem sucedido após refreshToken.');
+                        return $response->json();
+                    }
+                }
+            }
+
             Log::error('Meli getOrders error: '.$response->body());
 
             return ['error' => 'Erro ao buscar pedidos: '.$response->status()];
@@ -173,6 +191,22 @@ class MeliIntegrationService
 
             if ($response->successful()) {
                 return $response->json();
+            }
+
+            if ($response->status() === 401) {
+                if ($this->refreshToken()) {
+                    $integracao = $this->getIntegracao();
+                    $integracao->refresh();
+                    $token = $integracao->access_token;
+                    
+                    $response = Http::withHeaders([
+                        'Authorization' => 'Bearer '.$token,
+                    ])->get("https://api.mercadolibre.com/orders/{$orderId}");
+                    
+                    if ($response->successful()) {
+                        return $response->json();
+                    }
+                }
             }
 
             return ['error' => $response->json() ?? 'Erro ao buscar pedido'];
@@ -249,29 +283,7 @@ class MeliIntegrationService
 
             Log::info("Meli refreshOrder - atualizando pedido ID: {$orderId}, ML ID: {$pedido->pedido_id}");
 
-            $orderData = $this->getOrderDetail($pedido->pedido_id);
-
-            if (isset($orderData['error'])) {
-                Log::error('Meli refreshOrder - erro ao buscar: '.$orderData['error']);
-
-                return ['success' => false, 'message' => $orderData['error']];
-            }
-
-            // Buscar thumbnails dos produtos
-            $orderItems = $orderData['order_items'] ?? [];
-            foreach ($orderItems as &$item) {
-                $itemId = $item['item']['id'] ?? null;
-                if ($itemId) {
-                    $itemDetails = $this->getItemDetails($itemId);
-                    if (! isset($itemDetails['error']) && ! empty($itemDetails)) {
-                        $item['item']['thumbnail'] = $itemDetails['thumbnail'] ?? null;
-                        $item['item']['picture'] = $itemDetails['pictures'][0]['url'] ?? $itemDetails['thumbnail'] ?? null;
-                    }
-                }
-            }
-            $orderData['order_items'] = $orderItems;
-
-            $this->updateOrderStatus($pedido, $orderData);
+            $this->processImport(['id' => $pedido->pedido_id], $pedido->import_hash ?? md5($this->empresaId.'_'.$pedido->pedido_id));
 
             Log::info("Meli refreshOrder - pedido {$pedido->pedido_id} atualizado com sucesso");
 
@@ -510,21 +522,65 @@ class MeliIntegrationService
                         'label_pdf' => $shipment['label_pdf'] ?? null,
                         'tracking_number' => $shipment['tracking_number'] ?? null,
                         'tracking_url' => $shipment['tracking_url'] ?? null,
+                        'base_cost' => floatval($shipment['base_cost'] ?? 0),
+                        'cost_components' => $shipment['cost_components'] ?? [],
+                        'shipping_option' => $shipment['shipping_option'] ?? [],
                     ];
                 }
             }
         }
 
-        // Calcular taxas e valores
+        // Calcular taxas e valores base
         $valorTotal = floatval($orderData['total_amount'] ?? 0);
-        $valorFrete = floatval($orderData['shipping_cost'] ?? 0);
-        $valorProdutos = floatval($orderData['item_price'] ?? 0);
+        
+        // Buscar custo real do frete via endpoint /shipments/{id}/costs
+        $valorFrete = 0;
+        $shipmentId = $orderData['shipping']['id'] ?? null;
+        if ($shipmentId) {
+            $shippingCosts = $this->getShipmentCosts($shipmentId);
+            $valorFrete = floatval($shippingCosts['sender_cost'] ?? 0);
+        }
+        // Fallback: usar shipping_cost do order se a API de costs não retornou nada
+        if ($valorFrete <= 0 && !empty($orderData['shipping_cost'])) {
+            $valorFrete = floatval($orderData['shipping_cost']);
+        }
+        
+        $valorProdutos = 0;
+        if (!empty($orderData['order_items'])) {
+            foreach ($orderData['order_items'] as $item) {
+                $valorProdutos += floatval($item['unit_price'] ?? 0) * intval($item['quantity'] ?? 1);
+            }
+        }
+        
         $valorDesconto = floatval($orderData['discounts'] ?? 0);
 
-        // Calcular taxas do marketplace (tipicamente ~12-20%)
-        $taxaPlatform = $valorTotal * 0.12; // 12% do ML (ajustar conforme necessário)
-        $taxaPagamento = $valorTotal * 0.029; // ~2.9% do Mercado Pago
-        $valorLiquido = $valorTotal - $taxaPlatform - $taxaPagamento - $valorFrete;
+        // EXTRAÇÃO DE TARIFAS REAIS (Mercado Livre Sale Fee)
+        // O ML embute os subsídios (rebates) reduzindo a sale_fee nativa. Não usamos mais 12% fixo.
+        $taxaPlatform = 0;
+        if (!empty($orderData['order_items'])) {
+            foreach ($orderData['order_items'] as $item) {
+                if (isset($item['sale_fee'])) {
+                    $taxaPlatform += floatval($item['sale_fee']);
+                }
+            }
+        }
+        
+        // Fallback apenas se o ML estranhamente não enviar a tarifa (muito raro)
+        if ($taxaPlatform == 0 && $valorTotal > 0) {
+            $taxaPlatform = $valorTotal * 0.12; 
+        }
+
+        // No Mercado Livre, a taxa de pagamento do Mercado Pago já está embutida na tarifa de venda (sale_fee).
+        $taxaPagamento = 0;
+        
+        // Sum any official Taxes from ML Payload
+        $valorImposto = 0;
+        if (!empty($orderData['taxes']) && is_array($orderData['taxes'])) {
+            $valorImposto = collect($orderData['taxes'])->sum('amount');
+        }
+
+        // O valor_liquido definitivo usa a tarifa exata recebida.
+        $valorLiquido = $valorTotal - $taxaPlatform - $taxaPagamento - $valorFrete - $valorImposto;
 
         // Buscar thumbnails dos produtos
         $orderItems = $orderData['order_items'] ?? [];
@@ -587,6 +643,7 @@ class MeliIntegrationService
                 'valor_produtos' => $valorProdutos,
                 'valor_taxa_platform' => round($taxaPlatform, 2),
                 'valor_taxa_pagamento' => round($taxaPagamento, 2),
+                'valor_imposto' => round($valorImposto, 2),
                 'valor_liquido' => round($valorLiquido, 2),
                 'data_compra' => isset($orderData['date_created']) ? \Carbon\Carbon::parse($orderData['date_created']) : null,
                 'data_pagamento' => isset($orderData['date_closed']) ? \Carbon\Carbon::parse($orderData['date_closed']) : null,
@@ -630,13 +687,49 @@ class MeliIntegrationService
             Log::info("Pedido {$pedido->pedido_id} status alterado: {$pedido->status} -> {$newStatus}");
         }
 
+        // Recalcular valor_produtos se estiver zerado (ML não manda item_price no topo)
+        $valorProdutos = $pedido->valor_produtos;
+        if ($valorProdutos <= 0 && !empty($orderData['order_items'])) {
+            $valorProdutos = 0;
+            foreach ($orderData['order_items'] as $item) {
+                $valorProdutos += floatval($item['unit_price'] ?? 0) * intval($item['quantity'] ?? 1);
+            }
+        }
+
+        $existingJsonData = is_string($pedido->json_data) ? json_decode($pedido->json_data, true) : ($pedido->json_data ?? []);
+        
+        $mergedJsonData = $existingJsonData;
+        
+        // Let's replace only top-level primitives from the shallow API hit, leaving deep structures like billing_info and shipment_details untouched
+        foreach ($orderData as $key => $value) {
+            if (!is_array($value)) {
+                $mergedJsonData[$key] = $value;
+            } elseif (in_array($key, ['shipping', 'payments', 'order_items', 'feedback'])) {
+                 // overwrite arrays if they came in fuller or differently
+                 $mergedJsonData[$key] = $value;
+            }
+        }
+        
+        // Preserve billing_info and shipment_details explicitly just in case orderData came with them but empty
+        if (isset($existingJsonData['billing_info']) && empty($orderData['billing_info'])) {
+            $mergedJsonData['billing_info'] = $existingJsonData['billing_info'];
+        }
+        if (isset($existingJsonData['shipment_details']) && empty($orderData['shipment_details'])) {
+            $mergedJsonData['shipment_details'] = $existingJsonData['shipment_details'];
+        }
+        if (isset($existingJsonData['buyer']) && !empty($existingJsonData['buyer']['first_name']) && empty($orderData['buyer']['first_name'])) {
+            // Keep full buyer info if the new one is just a stub
+            $mergedJsonData['buyer'] = $existingJsonData['buyer'];
+        }
+
         $pedido->update([
             'status' => $newStatus,
             'status_pagamento' => $newStatus,
-            'status_envio' => $orderData['shipping']['status'] ?? null,
-            'codigo_rastreamento' => $orderData['shipping']['tracking_number'] ?? $pedido->codigo_rastreamento,
-            'url_rastreamento' => $orderData['shipping']['tracking_url'] ?? $pedido->url_rastreamento,
-            'json_data' => $orderData,
+            'status_envio' => $mergedJsonData['shipping']['status'] ?? null,
+            'codigo_rastreamento' => $mergedJsonData['shipping']['tracking_number'] ?? $pedido->codigo_rastreamento,
+            'url_rastreamento' => $mergedJsonData['shipping']['tracking_url'] ?? $pedido->url_rastreamento,
+            'valor_produtos' => $valorProdutos,
+            'json_data' => $mergedJsonData,
             'last_status_update' => now(),
         ]);
 
@@ -744,6 +837,47 @@ class MeliIntegrationService
             Log::error('Meli getShipment exception: '.$e->getMessage());
 
             return ['error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Busca os custos detalhados do frete via endpoint /shipments/{id}/costs
+     * Retorna o custo real que o vendedor paga pelo frete.
+     */
+    public function getShipmentCosts(string $shipmentId): array
+    {
+        $token = $this->getAccessToken();
+
+        if (! $token) {
+            return ['sender_cost' => 0, 'gross_amount' => 0];
+        }
+
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer '.$token,
+            ])->get("https://api.mercadolibre.com/shipments/{$shipmentId}/costs");
+
+            if ($response->successful()) {
+                $data = $response->json();
+                $senderCost = 0;
+                
+                if (!empty($data['senders'])) {
+                    foreach ($data['senders'] as $sender) {
+                        $senderCost += floatval($sender['cost'] ?? 0);
+                    }
+                }
+
+                return [
+                    'sender_cost' => $senderCost,
+                    'gross_amount' => floatval($data['gross_amount'] ?? 0),
+                    'raw' => $data,
+                ];
+            }
+
+            return ['sender_cost' => 0, 'gross_amount' => 0];
+        } catch (\Exception $e) {
+            Log::error('Meli getShipmentCosts exception: '.$e->getMessage());
+            return ['sender_cost' => 0, 'gross_amount' => 0];
         }
     }
 

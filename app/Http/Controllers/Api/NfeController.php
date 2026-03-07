@@ -186,7 +186,7 @@ class NfeController extends Controller
 
         $model = $type === 'recebida' ? \App\Models\NfeRecebida::class : \App\Models\NfeEmitida::class;
 
-        $notas = $model::with('itens')->whereIn('id', $ids)->get();
+        $notas = $model::with(['itens', 'empresa'])->whereIn('id', $ids)->get();
         $totalAssociated = 0;
 
         foreach ($notas as $nota) {

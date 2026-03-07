@@ -10,4 +10,16 @@ export default defineConfig({
             refresh: true,
         }),
     ],
+    build: {
+        chunkSizeWarningLimit: 1000,
+        rollupOptions: {
+            output: {
+                manualChunks(id) {
+                    if (id.includes('node_modules')) {
+                        return 'vendor'; // Split all node_modules into a vendor chunk
+                    }
+                }
+            }
+        }
+    }
 });

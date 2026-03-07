@@ -147,197 +147,268 @@
     </div>
 
     <!-- Orders List -->
-    <div x-show="!loading" class="space-y-3">
+    <div x-show="!loading" class="space-y-4">
         <!-- Header da Lista -->
-        <div class="flex items-center gap-2 px-2 py-1 bg-slate-800/50 rounded text-xs text-slate-400">
+        <div class="flex items-center gap-2 px-3 py-2 bg-slate-800/80 rounded-lg text-xs font-semibold text-slate-300 border border-slate-700">
             <input type="checkbox" 
                 @change="toggleAll()" 
                 :checked="selectedOrders.length > 0 && selectedOrders.length === orders.length"
-                class="rounded bg-slate-700 border-slate-600"
+                class="rounded bg-slate-900 border-slate-600 focus:ring-indigo-500"
             >
-            <span class="flex-1">Pedido</span>
-            <span class="w-20">Status</span>
-            <span class="w-24">Logística</span>
-            <span class="w-32">Valores</span>
-            <span class="w-28">NFe</span>
-            <span class="w-24">Ações</span>
+            <span class="flex-1 ml-2">Detalhes da Venda</span>
+            <span class="w-48 text-center hidden lg:block">Valores e Custos</span>
+            <span class="w-32 text-center hidden lg:block">Status Envio</span>
+            <span class="w-24 text-center">Ações</span>
         </div>
         
-        <template x-for="order in orders" :key="order.id">
-            <div class="bg-slate-800 rounded-lg border border-slate-700 p-3" :class="selectedOrders.includes(order.id) ? 'ring-2 ring-indigo-500' : ''">
-                <!-- Linha Principal -->
-                <div class="flex items-start gap-3">
-                    <!-- Checkbox -->
-                    <input type="checkbox" 
-                        :checked="selectedOrders.includes(order.id)"
-                        @change="toggleOrder(order.id)"
-                        class="mt-2 rounded bg-slate-700 border-slate-600"
-                    >
-                    
-                    <!-- Info Pedido -->
-                    <div class="flex-1 min-w-0">
-                        <div class="flex items-start justify-between gap-2">
-                            <div class="flex items-center gap-2">
-                                <div class="w-8 h-8 rounded flex items-center justify-center flex-shrink-0"
-                                    :class="getMarketplaceColor(order.marketplace)"
-                                >
-                                    <i :class="getMarketplaceIcon(order.marketplace)" class="text-sm"></i>
-                                </div>
-                                <div>
-                                    <p class="font-bold text-white text-sm" x-text="'#' + (order.pedido_id || order.id)"></p>
-                                    <p class="text-xs text-slate-400" x-text="formatDate(order.data_compra)"></p>
-                                </div>
-                            </div>
-                            
-                            <!-- Status Badge -->
-                            <span class="text-xs px-2 py-0.5 rounded-full whitespace-nowrap" :class="getStatusClass(order.status)" x-text="order.status"></span>
-                        </div>
-                        
-                        <!-- Cliente & Localização -->
-                        <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-                            <div class="flex items-center gap-1 text-slate-300">
-                                <i class="fas fa-user text-slate-500"></i>
-                                <span x-text="order.comprador_nome || 'Cliente não identificado'" class="max-w-[150px] truncate"></span>
-                                <button @click="copyToClipboard(order.comprador_cpf || order.comprador_cnpj, 'CPF/CNPJ')" 
-                                    x-show="order.comprador_cpf || order.comprador_cnpj"
-                                    class="text-slate-500 hover:text-white" title="Copiar">
-                                    <i class="fas fa-copy text-xs"></i>
-                                </button>
-                            </div>
-                            <div class="flex items-center gap-1 text-slate-400">
-                                <i class="fas fa-map-marker-alt text-slate-500"></i>
-                                <span x-text="order.cidade || '-'"></span>
-                                <span x-text="order.estado || ''"></span>
-                            </div>
-                            <div class="flex items-center gap-1 text-slate-400">
-                                <i class="fas fa-shipping-fast text-slate-500"></i>
-                                <span x-text="order.status_envio || 'Aguardando'"></span>
-                            </div>
-                            <div x-show="order.codigo_rastreamento" class="flex items-center gap-1 text-slate-400">
-                                <i class="fas fa-barcode text-slate-500"></i>
-                                <span x-text="order.codigo_rastreamento"></span>
-                                <button @click="copyToClipboard(order.codigo_rastreamento, 'Rastreio')" class="text-slate-500 hover:text-white" title="Copiar">
-                                    <i class="fas fa-copy text-xs"></i>
-                                </button>
-                            </div>
-                        </div>
-                        
-                        <!-- Itens (compacto) -->
-                        <div x-show="order.itens && order.itens.length > 0" class="mt-2 flex flex-wrap gap-2">
-                            <template x-for="item in order.itens" :key="item.sku">
-                                <div class="flex items-center gap-2 bg-slate-900/50 rounded px-2 py-1">
-                                    <img x-show="item.thumbnail" :src="item.thumbnail" class="w-6 h-6 object-cover rounded" alt="">
-                                    <div x-show="!item.thumbnail" class="w-6 h-6 bg-slate-700 rounded flex items-center justify-center">
-                                        <i class="fas fa-image text-slate-500 text-xs"></i>
-                                    </div>
-                                    <div class="min-w-0">
-                                        <a :href="'https://produto.mercadolivre.com.br/MLB-' + item.item_id" target="_blank" 
-                                            class="text-xs text-indigo-400 hover:text-indigo-300 truncate block max-w-[120px]" 
-                                            x-text="item.sku || 'SEM SKU'"></a>
-                                    </div>
-                                    <span class="text-xs text-slate-500" x-text="'x' + item.quantidade"></span>
-                                </div>
+        <template x-for="order in groupedOrders" :key="order.id">
+            <div class="bg-slate-800 rounded-xl border border-slate-700/60 overflow-hidden shadow-lg hover:border-slate-600 transition-colors" 
+                 :class="selectedOrders.includes(order.id) ? 'ring-2 ring-indigo-500 border-transparent' : ''">
+                
+                <!-- TOP HEADER BAR: MARKETPLACE & IDS -->
+                <div class="bg-slate-900/50 px-3 py-2 flex flex-wrap justify-between items-center border-b border-slate-700/50">
+                    <div class="flex items-center gap-3">
+                        <input type="checkbox" 
+                            :checked="selectedOrders.includes(order.id)"
+                            @change="toggleOrder(order.id)"
+                            class="rounded bg-slate-900 border-slate-600 focus:ring-indigo-500"
+                        >
+                        <div class="flex items-center gap-2">
+                            <i :class="getMarketplaceIcon(order.marketplace)" class="text-sm" :class="getMarketplaceColorOnlyText(order.marketplace)"></i>
+                            <span class="font-bold text-slate-200 text-sm">Venda <span class="text-indigo-400" x-text="'#' + (order.pedido_id || order.id)"></span></span>
+                            <template x-if="order.pack_id">
+                                <span class="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30 font-medium tracking-wide flex items-center gap-1" title="Pertence a um Carrinho de Compras do Mercado Livre">
+                                    <i class="fas fa-shopping-cart text-[9px]"></i> <span x-text="order.pack_id"></span>
+                                </span>
                             </template>
                         </div>
-                    </div>
-                    
-                    <!-- Logística -->
-                    <div class="w-20 text-center">
-                        <span class="text-xs px-2 py-1 rounded-full" :class="getLogisticsClass(order.logistics?.mode)" 
-                            x-text="getLogisticsLabel(order.logistics?.mode)"></span>
-                    </div>
-                    
-                    <!-- Valores Consolidados -->
-                    <div class="w-32 text-right text-xs">
-                        <div class="flex justify-between">
-                            <span class="text-slate-500">Venda:</span>
-                            <span class="text-white" x-text="formatMoney(order.valor_total)"></span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-slate-500">Frete:</span>
-                            <span class="text-white" x-text="formatMoney(order.valor_frete)"></span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-slate-500">Taxa:</span>
-                            <span class="text-red-400" x-text="'-' + formatMoney(order.taxas || 0)"></span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-slate-500">Custo:</span>
-                            <span class="text-amber-500" x-text="'-' + formatMoney(order.custo_total || 0)"></span>
-                        </div>
-                        <div class="flex justify-between font-bold border-t border-slate-700 pt-1 mt-1">
-                            <span class="text-slate-400">Lucro:</span>
-                            <span :class="(order.lucro || 0) >= 0 ? 'text-green-400' : 'text-red-400'" x-text="formatMoney(order.lucro || 0)"></span>
+                        <span class="hidden md:inline text-xs text-slate-500">|</span>
+                        <div class="hidden md:flex items-center gap-2 text-xs text-slate-400">
+                            <i class="far fa-calendar-alt"></i>
+                            <span x-text="formatDate(order.data_compra)"></span>
+                            <span x-show="order.data_pagamento" class="text-slate-600 flex items-center gap-1"><i class="fas fa-chevron-right text-[8px]"></i> Pago: <span class="text-slate-400" x-text="formatDate(order.data_pagamento)"></span></span>
                         </div>
                     </div>
-                    
-                    <!-- NFe -->
-                    <div class="w-24 text-center">
+                    <div class="flex items-center gap-2 mt-2 md:mt-0">
                         <template x-if="order.nfe_vinculada">
-                            <div class="flex flex-col items-center gap-1">
-                                <span class="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400" x-text="'#' + order.nfe_vinculada.numero"></span>
-                                <div class="flex gap-1">
-                                    <a :href="'/api/orders/' + order.id + '/danfe?empresa_id=' + empresaId" target="_blank" class="text-slate-400 hover:text-white p-1" title="Imprimir DANFE A4">
-                                        <i class="fas fa-file-invoice text-xs"></i>
-                                    </a>
-                                    <a :href="'/api/orders/' + order.id + '/danfe-simplificada?empresa_id=' + empresaId" target="_blank" class="text-slate-400 hover:text-white p-1" title="Imprimir DANFE Simplificado">
-                                        <i class="fas fa-receipt text-xs"></i>
-                                    </a>
+                            <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center gap-1 font-medium">
+                                <i class="fas fa-file-invoice"></i> NF-e <span x-text="order.nfe_vinculada.numero"></span>
+                            </span>
+                        </template>
+                        <span class="text-xs px-2 py-0.5 rounded-full font-medium shadow-sm border border-black/20" :class="getStatusClass(order.status)" x-text="order.status.toUpperCase()"></span>
+                    </div>
+                </div>
+
+                <!-- MAIN CARD BODY -->
+                <div class="p-3 flex flex-col lg:flex-row gap-4">
+                    
+                    <!-- LEFT COL: BUYER & PRODUCT DETAILS -->
+                    <div class="flex-1 flex flex-col gap-3 min-w-0">
+                        
+                        <!-- BUYER INFO GRID -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-900/30 p-2.5 rounded-lg border border-slate-700/30">
+                            <div class="flex flex-col gap-1 text-xs">
+                                <div class="text-slate-500 font-medium mb-0.5 text-[10px] uppercase tracking-wider">Comprador</div>
+                                <div class="flex items-center gap-1.5 text-slate-300">
+                                    <i class="fas fa-user text-slate-500 w-3 text-center"></i>
+                                    <span class="font-semibold text-slate-200 truncate" x-text="order.comprador_nome || 'Não identificado'"></span>
+                                    <span x-show="order.comprador_apelido" class="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700/50 text-[10px] text-indigo-300 font-medium" x-text="'@' + order.comprador_apelido"></span>
+                                </div>
+                                <div class="flex items-center gap-1.5 text-slate-400 mt-0.5">
+                                    <i class="fas fa-id-card text-slate-500 w-3 text-center"></i>
+                                    <span class="font-mono text-[11px]" x-text="order.comprador_cpf || order.comprador_cnpj || 'Doc. Indisponível'"></span>
+                                    <button @click="copyToClipboard(order.comprador_cpf || order.comprador_cnpj, 'Documento')" class="text-indigo-400 hover:text-indigo-300 ml-1"><i class="fas fa-copy"></i></button>
+                                </div>
+                                <div class="flex items-center gap-1.5 text-slate-400 mt-0.5" x-show="order.telefone">
+                                    <i class="fab fa-whatsapp text-slate-500 w-3 text-center"></i>
+                                    <span x-text="order.telefone"></span>
                                 </div>
                             </div>
-                        </template>
-                        <template x-if="!order.nfe_vinculada">
-                            <span class="text-xs text-red-400">Sem NFe</span>
-                        </template>
+                            
+                            <div class="flex flex-col gap-1 text-xs">
+                                <div class="text-slate-500 font-medium mb-0.5 text-[10px] uppercase tracking-wider">Endereço de Entrega</div>
+                                <div class="flex items-start gap-1.5 text-slate-300 leading-tight">
+                                    <i class="fas fa-map-marker-alt text-slate-500 w-3 text-center mt-0.5"></i>
+                                    <div class="flex-1">
+                                        <div class="truncate max-w-[250px] font-medium" x-text="order.endereco"></div>
+                                        <div class="text-slate-400 mt-0.5">
+                                            <span x-text="order.cidade"></span> <span x-show="order.estado" x-text="'- ' + order.estado"></span> 
+                                            <span x-show="order.cep" class="ml-1 text-indigo-300 font-mono text-[10px]" x-text="'CEP: ' + order.cep"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ITEMS BLOCK -->
+                        <div class="flex flex-col gap-2">
+                            <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1">Produtos</span>
+                            <div class="space-y-2">
+                                <template x-for="(item, idx) in order.itens" :key="(item.sku || 'nosku') + '_' + idx">
+                                    <div class="flex items-center gap-3 bg-slate-800 rounded-lg p-2 border border-slate-700 hover:border-slate-600 transition-colors">
+                                        <div class="w-12 h-12 flex-shrink-0 bg-slate-900 rounded overflow-hidden shadow-inner border border-slate-700/50 flex items-center justify-center">
+                                            <img x-show="item.thumbnail" :src="item.thumbnail" class="w-full h-full object-cover text-[8px] text-slate-600" alt="img">
+                                            <i x-show="!item.thumbnail" class="fas fa-box text-slate-500"></i>
+                                        </div>
+                                        <div class="flex-1 min-w-0 flex flex-col justify-between">
+                                            <div class="flex items-start justify-between gap-2">
+                                                <a :href="item.item_id ? 'https://produto.mercadolivre.com.br/MLB-' + item.item_id.replace('MLB', '') : '#'" target="_blank" 
+                                                   class="text-xs font-semibold text-slate-200 hover:text-indigo-400 line-clamp-1" title="Ver no Mercado Livre">
+                                                   <span x-text="item.titulo_reduzido || item.titulo || 'Produto sem título'"></span>
+                                                   <i class="fas fa-external-link-alt ml-1 text-[9px] text-slate-500"></i>
+                                                </a>
+                                                
+                                                <button x-show="!item.is_linked" @click="openLinkModal(order, item)" class="flex-shrink-0 animate-pulse hover:animate-none ml-auto text-[10px] px-2 py-0.5 rounded-full bg-red-500/10 border border-red-500/30 text-red-400 flex items-center gap-1 font-bold tracking-wide hover:bg-red-500 hover:text-white transition-all shadow shadow-red-500/20 cursor-pointer">
+                                                    <i class="fas fa-exclamation-triangle"></i> Associar
+                                                </button>
+                                            </div>
+                                            <div class="flex items-center gap-3 mt-1.5 text-[11px]">
+                                                <div class="flex items-center gap-1.5 bg-slate-900 px-2 py-0.5 rounded text-indigo-300 border border-indigo-500/20 shadow-sm">
+                                                    <span class="font-mono" x-text="item.sku || 'S/ SKU'"></span>
+                                                    <button @click="copyToClipboard(item.sku, 'SKU')" class="hover:text-indigo-100 ml-0.5"><i class="fas fa-copy text-[10px]"></i></button>
+                                                </div>
+                                                <span class="text-slate-500 font-mono text-[10px]" x-show="item.item_id" x-text="'MLB' + item.item_id.replace('MLB', '')"></span>
+                                            </div>
+                                        </div>
+                                        <div class="flex flex-col items-end justify-center pr-2">
+                                            <span class="text-[13px] font-black text-emerald-400" x-text="formatMoney(item.preco_unitario)"></span>
+                                            <span class="text-[11px] px-1.5 py-0.5 bg-slate-700/50 rounded text-slate-300 font-medium mt-1" x-text="'Qtd: ' + item.quantidade"></span>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
                     </div>
                     
-                    <!-- Ações -->
-                    <div class="w-24 flex flex-col items-end gap-1">
-                        <!-- Dropdown Ações -->
-                        <div class="relative">
-                            <button @click="toggleActionsMenu(order.id)" class="text-slate-400 hover:text-white p-1">
+                    <!-- DIVIDER ON DESKTOP -->
+                    <div class="hidden lg:block w-px bg-slate-700/50 my-2"></div>
+
+                    <!-- RIGHT COL: FINANCIALS & STATUS -->
+                    <div class="flex flex-col gap-3 w-full lg:w-[220px] flex-shrink-0">
+                        
+                        <!-- FINANCIAL SUMMARY (Mercado Turbo style) -->
+                        <div class="bg-slate-900/40 rounded-lg border border-slate-700/50 p-3 h-full flex flex-col">
+                            <div class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2.5 pb-2 border-b border-slate-700/50 text-center">Resumo Financeiro</div>
+                            
+                            <div class="flex flex-col gap-2 text-xs flex-1 justify-center">
+                                <div class="flex justify-between items-center group">
+                                    <span class="text-slate-400 group-hover:text-slate-300">Valor Venda</span>
+                                    <span class="font-bold text-slate-200 text-[13px]" x-text="formatMoney(order.valor_produtos)"></span>
+                                </div>
+                                <div class="flex justify-between items-center group" title="Custo do Produto (Média)">
+                                    <span class="text-slate-400 group-hover:text-slate-300">Custo Produto</span>
+                                    <span class="text-amber-500 font-medium" x-text="'-' + formatMoney(order.custo_total)"></span>
+                                </div>
+                                <div class="flex justify-between items-center group" title="Tarifa do Marketplace">
+                                    <div class="flex items-center gap-1.5 text-slate-400 group-hover:text-slate-300">
+                                        Tarifa ML
+                                        <span class="text-[9px] bg-slate-800 border border-slate-700 px-1 py-px rounded font-mono" x-show="order.taxa_platform > 0" x-text="(Math.round((order.taxa_platform / (order.valor_produtos || 1)) * 100) + '%')"></span>
+                                    </div>
+                                    <span class="text-red-400 font-medium" x-text="'-' + formatMoney(order.taxa_platform)"></span>
+                                </div>
+                                <div class="flex justify-between items-center group" x-show="order.taxa_pagamento > 0" title="Taxa de Pagamento">
+                                    <div class="flex items-center gap-1.5 text-slate-400 group-hover:text-slate-300">
+                                        Taxas Pgto
+                                    </div>
+                                    <span class="text-red-400 font-medium" x-text="'-' + formatMoney(order.taxa_pagamento)"></span>
+                                </div>
+                                <div class="flex justify-between items-center group" title="Imposto/Tributação NFe">
+                                    <div class="flex items-center gap-1.5 text-slate-400 group-hover:text-slate-300">
+                                        Imposto/Tributos
+                                        <span class="text-[9px] bg-slate-800 border border-slate-700 px-1 py-px rounded font-mono" x-show="order.aliquota_imposto > 0" x-text="order.aliquota_imposto + '%'"></span>
+                                    </div>
+                                    <span class="text-red-400 font-medium" x-text="'-' + formatMoney(order.valor_imposto)"></span>
+                                </div>
+                                <div class="flex justify-between items-center group" title="Custo do Frete">
+                                    <span class="text-slate-400 group-hover:text-slate-300">Custo Frete</span>
+                                    <span class="text-red-400 font-medium" x-text="'-' + formatMoney(order.valor_frete)"></span>
+                                </div>
+                                
+                                <div class="mt-auto pt-3">
+                                    <div class="bg-slate-900 border border-slate-700 rounded-lg p-2.5 flex justify-between items-center shadow-inner">
+                                        <span class="text-xs font-black text-slate-300 uppercase tracking-widest">Lucro</span>
+                                        <div class="flex flex-col items-end">
+                                            <span class="text-[15px] font-black drop-shadow-sm" :class="(order.lucro || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'" x-text="formatMoney(order.lucro || 0)"></span>
+                                            <span class="text-[10px] mt-0.5 font-bold" :class="(order.lucro || 0) >= 0 ? 'text-emerald-500/80' : 'text-red-500/80'" x-text="order.lucro_percent + '% margem'"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- DIVIDER ON DESKTOP -->
+                    <div class="hidden lg:block w-px bg-slate-700/50 my-2"></div>
+
+                    <!-- FAR RIGHT: LOGISTICS & ACTIONS -->
+                    <div class="flex flex-col justify-between w-full lg:w-36 flex-shrink-0 gap-3">
+                        
+                        <!-- SHIPPING STATUS -->
+                        <div class="flex flex-col items-center justify-center text-center gap-2 bg-slate-900/30 p-2.5 rounded-lg border border-slate-700/30 relative">
+                            
+                            <span class="absolute top-0 right-0 left-0 h-1 rounded-t-lg opacity-50 block" :class="order.status_envio === 'delivered' ? 'bg-emerald-500' : (order.status_envio === 'shipped' ? 'bg-blue-500' : 'bg-yellow-500')"></span>
+
+                            <span class="text-[10px] px-2.5 py-1 rounded-full w-full font-bold shadow-sm uppercase tracking-wider mt-1" :class="getLogisticsClass(order.logistics?.mode)">
+                                <i class="fas fa-truck-fast mr-1"></i> <span x-text="getLogisticsLabel(order.logistics?.mode)"></span>
+                            </span>
+                            
+                            <div class="flex flex-col gap-1 my-2">
+                                <span class="text-sm font-black uppercase tracking-wider drop-shadow-sm" :class="order.status_envio === 'delivered' ? 'text-emerald-400' : (order.status_envio === 'shipped' ? 'text-blue-400' : 'text-yellow-400')" x-text="(order.status_envio === 'delivered' ? 'Entregue' : (order.status_envio === 'shipped' ? 'A Caminho' : 'Aguardando'))"></span>
+                                <span x-show="order.codigo_rastreamento" class="text-[11px] bg-slate-900 border border-slate-600 px-2 py-1 rounded font-mono mt-1 cursor-pointer hover:bg-slate-700 transition-colors text-slate-300" @click="copyToClipboard(order.codigo_rastreamento, 'Rastreio')" title="Copiar Rastreio">
+                                    <i class="fas fa-barcode text-slate-500 mr-1"></i><span x-text="order.codigo_rastreamento"></span>
+                                </span>
+                            </div>
+                            
+                            <a x-show="order.url_rastreamento" :href="order.url_rastreamento" target="_blank" class="mt-1 text-[10px] text-indigo-400 hover:text-indigo-300 hover:underline font-medium bg-indigo-500/10 px-2 py-1 rounded w-full border border-indigo-500/20 shadow-sm">
+                                Rastrear <i class="fas fa-external-link-alt ml-1 text-[9px]"></i>
+                            </a>
+                        </div>
+                        
+                        <!-- ACTIONS -->
+                        <div class="flex items-center gap-1.5 w-full relative mt-auto">
+                            <!-- primary action -->
+                            <template x-if="order.nfe_vinculada">
+                                <button @click="window.open('/api/orders/' + order.id + '/etiqueta?empresa_id=' + empresaId, '_blank')" class="flex-1 bg-indigo-600 hover:bg-indigo-500 border-t border-indigo-400/30 text-white text-xs py-2 rounded-lg transition-colors shadow shadow-indigo-500/20 font-bold flex items-center justify-center gap-1.5">
+                                    <i class="fas fa-print"></i> Etiqueta
+                                </button>
+                            </template>
+                            <template x-if="!order.nfe_vinculada">
+                                <button @click="window.open('/api/orders/' + order.id + '/etiqueta-meli?empresa_id=' + empresaId, '_blank')" class="flex-1 bg-gradient-to-t from-yellow-600/30 to-yellow-500/20 hover:from-yellow-500/40 hover:to-yellow-400/30 border border-yellow-500/40 text-yellow-400 text-xs py-2 rounded-lg transition-colors shadow-sm font-bold flex items-center justify-center gap-1.5 cursor-pointer">
+                                    <i class="fas fa-tag"></i> Etiq. ML
+                                </button>
+                            </template>
+                            
+                            <!-- Dropdown Trigger -->
+                            <button @click="toggleActionsMenu(order.id)" class="px-2.5 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition-colors shadow-sm cursor-pointer border border-slate-600" :class="actionsMenuOpen === order.id ? 'bg-slate-600 ring-2 ring-slate-400' : ''">
                                 <i class="fas fa-ellipsis-v"></i>
                             </button>
-                            
-                            <div x-show="actionsMenuOpen === order.id" @click.away="actionsMenuOpen = null" 
-                                class="absolute right-0 mt-1 w-48 bg-slate-700 border border-slate-600 rounded-lg shadow-xl z-50 overflow-hidden text-xs">
+
+                            <!-- Dropdown Menu -->
+                            <div x-show="actionsMenuOpen === order.id" @click.away="actionsMenuOpen = null"
+                                x-transition:enter="transition ease-out duration-100"
+                                x-transition:enter-start="transform opacity-0 scale-95"
+                                x-transition:enter-end="transform opacity-100 scale-100"
+                                class="absolute right-0 bottom-full mb-2 w-52 bg-slate-800 border border-slate-600 rounded-xl shadow-2xl z-50 overflow-hidden text-xs">
                                 
-                                <!-- Etiqueta ML -->
-                                <a :href="'/api/orders/' + order.id + '/etiqueta-meli?empresa_id=' + empresaId" target="_blank"
-                                    class="block px-3 py-2 text-slate-200 hover:bg-slate-600 flex items-center gap-2">
-                                    <i class="fas fa-tag w-4"></i> Etiqueta ML
+                                <div class="px-3 py-2 bg-slate-900/80 text-slate-400 font-bold uppercase text-[10px] border-b border-slate-700 tracking-wider">Impressão NFe</div>
+                                <a x-show="order.nfe_vinculada" :href="'/api/orders/' + order.id + '/danfe?empresa_id=' + empresaId" target="_blank" class="block px-4 py-2 text-slate-200 hover:bg-slate-700 hover:text-white transition-colors flex items-center gap-2 cursor-pointer">
+                                    <i class="fas fa-file-pdf w-4 text-red-400"></i> Imprimir DANFE A4
+                                </a>
+                                <a x-show="order.nfe_vinculada" :href="'/api/orders/' + order.id + '/danfe-simplificada?empresa_id=' + empresaId" target="_blank" class="block px-4 py-2 text-slate-200 hover:bg-slate-700 hover:text-white transition-colors flex items-center gap-2 cursor-pointer">
+                                    <i class="fas fa-receipt w-4 text-emerald-400"></i> Imprimir DANFE Simples
                                 </a>
                                 
-                                <!-- Etiqueta NFe (se houver NFe) -->
-                                <a x-show="order.nfe_vinculada" :href="'/api/orders/' + order.id + '/etiqueta?empresa_id=' + empresaId" target="_blank"
-                                    class="block px-3 py-2 text-slate-200 hover:bg-slate-600 flex items-center gap-2">
-                                    <i class="fas fa-shipping-fast w-4"></i> Etiqueta NFe
+                                <div class="px-3 py-2 bg-slate-900/80 text-slate-400 font-bold uppercase text-[10px] border-y border-slate-700 tracking-wider mt-1">Gerenciamento</div>
+                                <a :href="'https://www.mercadolivre.com.br/vendas/' + order.pedido_id + '/detalhe'" target="_blank" class="block px-4 py-2 text-slate-200 hover:bg-slate-700 hover:text-white transition-colors flex items-center gap-2 font-medium cursor-pointer">
+                                    <i class="fab fa-mercadolivre w-4 text-yellow-400"></i> Ver Venda no Mercado Livre
                                 </a>
-                                
-                                <!-- Ver no ML -->
-                                <a :href="'https://www.mercadolivre.com.br/vendas/' + order.pedido_id + '/detalhe'" target="_blank"
-                                    class="block px-3 py-2 text-slate-200 hover:bg-slate-600 flex items-center gap-2">
-                                    <i class="fab fa-mercadolivre w-4"></i> Ver no ML
-                                </a>
-                                
-                                <!-- Produto -->
-                                <a x-show="order.item_id" :href="'https://produto.mercadolivre.com.br/MLB-' + order.item_id" target="_blank"
-                                    class="block px-3 py-2 text-slate-200 hover:bg-slate-600 flex items-center gap-2">
-                                    <i class="fas fa-external-link-alt w-4"></i> Ver Produto
-                                </a>
-                                
-                                <div class="border-t border-slate-600"></div>
-                                
-                                <!-- Atualizar -->
-                                <button @click="refreshOrder(order.id); actionsMenuOpen = null"
-                                    class="w-full text-left px-3 py-2 text-slate-200 hover:bg-slate-600 flex items-center gap-2">
-                                    <i class="fas fa-sync w-4"></i> Atualizar
+                                <button @click="refreshOrder(order.id); actionsMenuOpen = null" class="w-full text-left px-4 py-2 text-slate-200 hover:bg-slate-700 hover:text-white transition-colors flex items-center gap-2 cursor-pointer">
+                                    <i class="fas fa-sync w-4 text-blue-400"></i> Sincronizar Novos Dados
                                 </button>
-                                
-                                <!-- Ver JSON -->
-                                <button @click="viewJson(order); actionsMenuOpen = null"
-                                    class="w-full text-left px-3 py-2 text-slate-200 hover:bg-slate-600 flex items-center gap-2">
-                                    <i class="fas fa-code w-4"></i> Ver JSON
+                                <button @click="viewJson(order); actionsMenuOpen = null" class="w-full text-left px-4 py-2 text-slate-200 hover:bg-slate-700 hover:text-white transition-colors flex items-center gap-2 mb-1 cursor-pointer">
+                                    <i class="fas fa-code w-4 text-slate-500"></i> Ver JSON Técnico
                                 </button>
                             </div>
                         </div>
@@ -379,7 +450,7 @@
     </div>
     
     <!-- Modal JSON -->
-    <div x-show="showJsonModal" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-100" class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" @click.self="closeJsonModal()">
+    <div x-show="showJsonModal" style="display: none;" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-100" class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" @click.self="closeJsonModal()">
         <div x-show="showJsonModal" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100" x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95" class="bg-slate-800 rounded-xl border border-slate-600 w-full max-w-4xl max-h-[80vh] flex flex-col">
             <div class="flex items-center justify-between p-4 border-b border-slate-700">
                 <h3 class="text-lg font-bold text-white">JSON do Pedido</h3>
@@ -389,6 +460,90 @@
             </div>
             <div class="flex-1 overflow-auto p-4">
                 <pre class="text-xs text-green-400 font-mono whitespace-pre-wrap" x-text="JSON.stringify(currentJson, null, 2)"></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Link Product -->
+    <div x-show="showLinkModal" style="display: none;" class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" @click.self="closeLinkModal()">
+        <div class="bg-slate-800 rounded-xl border border-slate-600 w-full max-w-lg shadow-2xl overflow-hidden flex flex-col">
+            <div class="bg-slate-900 border-b border-slate-700 p-4 shrink-0 px-6 flex items-center justify-between">
+                <div>
+                    <h3 class="text-lg font-black tracking-tight text-white mb-1"><i class="fas fa-link mr-2 text-indigo-400"></i> Associar Produto Local</h3>
+                    <p class="text-[11px] text-slate-400 font-medium">Ligue o item do ML a um produto no sistema para calcular o lucro.</p>
+                </div>
+                <button @click="closeLinkModal()" class="text-slate-500 hover:text-slate-300 w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center transition-colors">
+                    <i class="fas fa-times text-sm"></i>
+                </button>
+            </div>
+            
+            <div class="p-6 bg-slate-800/50 flex-1 overflow-y-auto">
+                <div class="mb-5 bg-indigo-500/10 border border-indigo-400/20 rounded-lg p-3">
+                    <div class="text-[10px] uppercase font-bold text-indigo-400 mb-1">Item do Pedido</div>
+                    <div class="text-sm font-semibold text-slate-200 line-clamp-2" x-text="linkingItem?.titulo"></div>
+                    <div class="text-[11px] text-slate-400 mt-1 font-mono" x-show="linkingItem?.item_id">ID: <span x-text="linkingItem.item_id"></span></div>
+                </div>
+
+                <div class="relative">
+                    <label class="block text-xs font-bold text-slate-300 uppercase tracking-wide mb-2">Buscar Produto Local</label>
+                    <div class="relative">
+                        <i class="fas fa-search absolute left-3.5 top-3.5 text-slate-400 text-sm pointer-events-none"></i>
+                        <input type="text" x-model="searchQuery" @input.debounce.300ms="searchProducts" placeholder="Digite nome, SKU ou EAN do produto..." 
+                            class="w-full bg-slate-900 border border-slate-600 rounded-lg pl-10 pr-4 py-2.5 text-sm text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all shadow-inner" autocomplete="off">
+                    </div>
+                    
+                    <div x-show="isSearching" class="absolute right-3 top-[36px] text-indigo-400 animate-spin">
+                        <i class="fas fa-spinner"></i>
+                    </div>
+                </div>
+
+                <div class="mt-4 border border-slate-700 bg-slate-900 rounded-lg max-h-60 overflow-y-auto overflow-x-hidden p-1 space-y-1">
+                    <div x-show="searchResults.length === 0 && searchQuery.length > 2 && !isSearching" class="p-4 text-center text-slate-500 text-sm">
+                        Nenhum produto local encontrado.
+                    </div>
+                    
+                    <div x-show="searchQuery.length <= 2" class="p-4 text-center text-slate-500 text-xs italic">
+                        Digite pelo menos 3 caracteres para buscar...
+                    </div>
+
+                    <template x-for="prod in searchResults" :key="prod.id">
+                        <div @click="selectedProduct = prod" 
+                             class="flex items-center gap-3 p-2.5 rounded-md cursor-pointer transition-colors border-2"
+                             :class="selectedProduct?.id === prod.id ? 'bg-indigo-500/20 border-indigo-500' : 'border-transparent hover:bg-slate-700'">
+                            <div class="w-10 h-10 rounded bg-slate-800 flex items-center justify-center shrink-0 border border-slate-600 relative overflow-hidden">
+                                <template x-if="prod.fotos && prod.fotos.length > 0">
+                                    <img :src="prod.fotos[0].url" class="absolute w-full h-full object-cover">
+                                </template>
+                                <i x-show="!prod.fotos || prod.fotos.length === 0" class="fas fa-box text-slate-500"></i>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-sm font-bold text-slate-200 truncate" x-text="prod.nome"></div>
+                                <div class="text-[10px] text-slate-400 mt-0.5 flex items-center gap-2 font-mono">
+                                    <span x-text="prod.tipo.toUpperCase()" class="lowercase font-semibold bg-slate-800 px-1.5 py-0.5 rounded text-[9px]"></span>
+                                    <span>ID: <span x-text="prod.id"></span></span>
+                                    <span x-show="prod.sku">SKU: <span x-text="prod.sku"></span></span>
+                                </div>
+                            </div>
+                            <div class="w-5 h-5 flex items-center justify-center shrink-0 rounded-full" 
+                                 :class="selectedProduct?.id === prod.id ? 'bg-indigo-500 text-white' : 'border border-slate-500 text-transparent'">
+                                <i class="fas fa-check text-[10px]" x-show="selectedProduct?.id === prod.id"></i>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+            
+            <div class="bg-slate-900 border-t border-slate-700 p-4 shrink-0 flex items-center justify-end gap-3">
+                <button type="button" @click="closeLinkModal()" class="px-5 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-700 transition-colors">
+                    Cancelar
+                </button>
+                <button type="button" @click="submitLink()" :disabled="!selectedProduct || isSubmitting" 
+                    class="px-5 py-2.5 rounded-lg text-sm font-bold shadow-lg transition-all flex items-center gap-2"
+                    :class="selectedProduct && !isSubmitting ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/30' : 'bg-slate-700 text-slate-400 cursor-not-allowed'">
+                    <i class="fas fa-spinner animate-spin" x-show="isSubmitting"></i>
+                    <i class="fas fa-link" x-show="!isSubmitting"></i>
+                    Vincular e Recalcular
+                </button>
             </div>
         </div>
     </div>
@@ -421,6 +576,15 @@ function ordersPage() {
         total: 0,
         from: 0,
         to: 0,
+
+        showLinkModal: false,
+        linkingOrder: null,
+        linkingItem: null,
+        searchQuery: '',
+        searchResults: [],
+        isSearching: false,
+        selectedProduct: null,
+        isSubmitting: false,
         
         init() {
             const savedEmpresa = localStorage.getItem('empresa_id');
@@ -584,6 +748,86 @@ function ordersPage() {
             });
         },
         
+        get groupedOrders() {
+            let groups = [];
+            let packMap = {};
+            
+            this.orders.forEach(order => {
+                if (order.pack_id) {
+                    if (!packMap[order.pack_id]) {
+                        packMap[order.pack_id] = {
+                            is_pack: true,
+                            pack_id: order.pack_id,
+                            id: order.id,
+                            pedido_id: order.pack_id,
+                            external_id: order.external_id,
+                            marketplace: order.marketplace,
+                            data_compra: order.data_compra,
+                            data_pagamento: order.data_pagamento,
+                            data_envio: order.data_envio,
+                            data_entrega: order.data_entrega,
+                            comprador_nome: order.comprador_nome,
+                            comprador_apelido: order.comprador_apelido,
+                            comprador_cpf: order.comprador_cpf,
+                            comprador_cnpj: order.comprador_cnpj,
+                            telefone: order.telefone,
+                            cidade: order.cidade,
+                            estado: order.estado,
+                            cep: order.cep,
+                            endereco: order.endereco,
+                            status: order.status,
+                            nfe_vinculada: order.nfe_vinculada,
+                            logistics: order.logistics,
+                            url_rastreamento: order.url_rastreamento,
+                            // Sums
+                            valor_total: 0,
+                            valor_frete: 0,
+                            valor_desconto: 0,
+                            valor_produtos: 0,
+                            taxas: 0,
+                            lucro: 0,
+                            custo_total: 0,
+                            lucro_percent: 0,
+                            taxa_platform: 0,
+                            taxa_pagamento: 0,
+                            valor_imposto: 0,
+                            itens: [],
+                            sub_orders: []
+                        };
+                        groups.push(packMap[order.pack_id]);
+                    }
+                    
+                    let g = packMap[order.pack_id];
+                    g.sub_orders.push(order);
+                    g.valor_total += (order.valor_total || 0);
+                    g.valor_frete += (order.valor_frete || 0);
+                    g.valor_desconto += (order.valor_desconto || 0);
+                    g.valor_produtos += (order.valor_produtos || 0);
+                    g.taxas += (order.taxas || 0);
+                    g.lucro += (order.lucro || 0);
+                    g.custo_total += (order.custo_total || 0);
+                    g.taxa_platform += (order.taxa_platform || 0);
+                    g.taxa_pagamento += (order.taxa_pagamento || 0);
+                    g.valor_imposto += (order.valor_imposto || 0);
+                    
+                    if (g.valor_total > 0) {
+                        g.lucro_percent = Math.round((g.lucro / g.valor_total) * 100);
+                    }
+                    
+                    if (order.itens && order.itens.length > 0) {
+                        g.itens.push(...order.itens);
+                    }
+                } else {
+                    groups.push({
+                        is_pack: false,
+                        ...order,
+                        sub_orders: [order]
+                    });
+                }
+            });
+            return groups;
+        },
+        
         get totalValue() {
             return this.orders.reduce((sum, o) => sum + (o.valor_total || 0), 0);
         },
@@ -622,6 +866,11 @@ function ordersPage() {
         getMarketplaceColor(mp) {
             const colors = { 'mercadolivre': 'bg-yellow-500/20 text-yellow-400', 'amazon': 'bg-orange-500/20 text-orange-400', 'bling': 'bg-green-500/20 text-green-400' };
             return colors[mp] || 'bg-slate-600';
+        },
+        
+        getMarketplaceColorOnlyText(mp) {
+            const colors = { 'mercadolivre': 'text-yellow-400', 'amazon': 'text-orange-400', 'bling': 'text-green-400' };
+            return colors[mp] || 'text-slate-400';
         },
         
         getStatusClass(status) {
@@ -673,6 +922,80 @@ function ordersPage() {
         closeJsonModal() {
             this.showJsonModal = false;
             this.currentJson = null;
+        },
+
+        openLinkModal(order, item) {
+            this.linkingOrder = order;
+            this.linkingItem = item;
+            this.searchQuery = '';
+            this.searchResults = [];
+            this.selectedProduct = null;
+            this.showLinkModal = true;
+        },
+
+        closeLinkModal() {
+            this.showLinkModal = false;
+            setTimeout(() => {
+                this.linkingOrder = null;
+                this.linkingItem = null;
+                this.searchResults = [];
+                this.searchQuery = '';
+                this.selectedProduct = null;
+            }, 300);
+        },
+
+        async searchProducts() {
+            if (this.searchQuery.length < 3) {
+                this.searchResults = [];
+                return;
+            }
+            this.isSearching = true;
+            try {
+                const response = await fetch(`/api/products/search?q=${encodeURIComponent(this.searchQuery)}`);
+                const data = await response.json();
+                this.searchResults = data || [];
+            } catch (error) {
+                console.error('Error searching products:', error);
+            }
+            this.isSearching = false;
+        },
+
+        async submitLink() {
+            if (!this.selectedProduct || !this.linkingItem || !this.linkingOrder) return;
+            
+            this.isSubmitting = true;
+            try {
+                const response = await fetch('/api/orders/link-item', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': this.getCsrfToken(),
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        order_id: this.linkingOrder.id,
+                        item_id: this.linkingItem.item_id,
+                        produto_id: this.selectedProduct.id
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success && data.order) {
+                    // Update order natively
+                    const idx = this.orders.findIndex(o => o.id === this.linkingOrder.id);
+                    if (idx !== -1) {
+                        this.orders[idx] = data.order;
+                    }
+                    this.closeLinkModal();
+                    alert(data.message);
+                } else {
+                    alert('Erro: ' + (data.error || 'Falha ao vincular o produto.'));
+                }
+            } catch (error) {
+                console.error('Erro ao vincular item:', error);
+                alert('Erro ao vincular produto. Veja o console.');
+            }
+            this.isSubmitting = false;
         }
     }
 }

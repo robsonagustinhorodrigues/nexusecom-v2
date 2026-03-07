@@ -29,10 +29,15 @@ class Notificacao extends Model
         return $this->belongsTo(User::class);
     }
 
-    public static function criar(string $tipo, string $titulo, string $mensagem, string $cor = 'info', string $link = null): self
+    public static function criar(string $tipo, string $titulo, string $mensagem, string $cor = 'info', string $link = null, ?int $userId = null): self
     {
+        if (!$userId) {
+            $user = User::first();
+            $userId = $user ? $user->id : null;
+        }
+
         return self::create([
-            'user_id' => 1, // Admin principal
+            'user_id' => $userId,
             'tipo' => $tipo,
             'titulo' => $titulo,
             'mensagem' => $mensagem,

@@ -86,10 +86,33 @@ class AnuncioController extends Controller
         $hasPromotion = ! empty($ad->promocao_valor);
         $isCatalog = ! empty($jsonData['catalog_listing']);
 
+        $dateCreated = null;
+        $lastUpdated = null;
+        if (!empty($jsonData['date_created'])) {
+            try {
+                $dateCreated = \Carbon\Carbon::parse($jsonData['date_created'])->format('d/m/Y');
+            } catch (\Exception $e) {}
+        }
+        if (!empty($jsonData['last_updated'])) {
+            try {
+                $lastUpdated = \Carbon\Carbon::parse($jsonData['last_updated'])->format('d/m/Y');
+            } catch (\Exception $e) {}
+        }
+
+        $variationId = $jsonData['variation_id'] ?? null;
+        if (empty($variationId) && !empty($jsonData['variations']) && is_array($jsonData['variations'])) {
+            $count = count($jsonData['variations']);
+            if ($count === 1) {
+                $variationId = $jsonData['variations'][0]['id'] ?? null;
+            } else {
+                $variationId = "{$count} Vars";
+            }
+        }
+
         return [
             'id' => $ad->id,
             'external_id' => $ad->external_id,
-            'variation_id' => $jsonData['variation_id'] ?? null,
+            'variation_id' => $variationId,
             'titulo' => $ad->titulo,
             'sku' => $ad->sku,
             'preco' => floatval($ad->preco ?? 0),
@@ -102,7 +125,7 @@ class AnuncioController extends Controller
             'marketplace' => $ad->marketplace,
             'thumbnail' => $ad->thumbnail ?? ($jsonData['thumbnail'] ?? null),
             'url' => $ad->url ?? '#',
-            'sold_quantity' => intval($ad->sold_quantity ?? 0),
+            'sold_quantity' => intval($jsonData['sold_quantity'] ?? 0),
             'visits' => intval($jsonData['visits'] ?? 0),
             'product_linked' => ! empty($ad->product_sku_id),
             'produto_id' => $ad->produto_id,
@@ -127,6 +150,8 @@ class AnuncioController extends Controller
             'json_data' => $jsonData,
             'created_at' => $ad->created_at,
             'updated_at' => $ad->updated_at,
+            'meli_date_created' => $dateCreated,
+            'meli_last_updated' => $lastUpdated,
         ];
     }
 
@@ -209,17 +234,36 @@ class AnuncioController extends Controller
     {
         $medidas = [];
 
+        // Check root properties
         if (! empty($jsonData['height'])) {
-            $medidas['altura'] = $jsonData['height'];
+            $medidas['altura'] = $jsonData['height'] . ' cm';
         }
         if (! empty($jsonData['width'])) {
-            $medidas['largura'] = $jsonData['width'];
+            $medidas['largura'] = $jsonData['width'] . ' cm';
         }
         if (! empty($jsonData['length'])) {
-            $medidas['comprimento'] = $jsonData['length'];
+            $medidas['comprimento'] = $jsonData['length'] . ' cm';
         }
         if (! empty($jsonData['weight'])) {
-            $medidas['peso'] = $jsonData['weight'];
+            $medidas['peso'] = $jsonData['weight'] . ' g';
+        }
+
+        // Check attributes (Meli pattern)
+        if (!empty($jsonData['attributes']) && is_array($jsonData['attributes'])) {
+            foreach ($jsonData['attributes'] as $attr) {
+                if ($attr['id'] === 'PACKAGE_HEIGHT') {
+                    $medidas['altura'] = $attr['value_name'];
+                }
+                if ($attr['id'] === 'PACKAGE_WIDTH') {
+                    $medidas['largura'] = $attr['value_name'];
+                }
+                if ($attr['id'] === 'PACKAGE_LENGTH') {
+                    $medidas['comprimento'] = $attr['value_name'];
+                }
+                if ($attr['id'] === 'PACKAGE_WEIGHT') {
+                    $medidas['peso'] = $attr['value_name'];
+                }
+            }
         }
 
         return $medidas;
@@ -296,6 +340,8 @@ class AnuncioController extends Controller
         }
 
         $products = \App\Models\Product::where('grupo_id', $grupoId)
+            ->with(['skus', 'parent'])
+            ->withCount('variations')
             ->where('tipo', '!=', 'variacao') // Excluir produtos pais (tipo variacao = pai)
             ->where(function ($q) use ($query) {
                 $q->whereRaw('LOWER(nome) LIKE ?', ['%'.strtolower($query).'%'])
@@ -304,7 +350,7 @@ class AnuncioController extends Controller
             ->limit(20)
             ->get()
             ->map(function ($p) {
-                $firstSku = $p->skus()->first();
+                $firstSku = $p->skus->first();
 
                 // Verificar se é uma variação (filho)
                 $isVariation = ! empty($p->parent_id);
@@ -314,7 +360,7 @@ class AnuncioController extends Controller
                 }
 
                 // Contar variaçõesfilhos
-                $variationsCount = $p->variations()->count();
+                $variationsCount = $p->variations_count ?? 0;
 
                 return [
                     'id' => $p->id,
@@ -322,7 +368,7 @@ class AnuncioController extends Controller
                     'sku' => $firstSku?->sku ?? $p->sku,
                     'preco_venda' => floatval($p->preco_venda),
                     'preco_custo' => floatval($firstSku?->preco_custo ?? $p->preco_custo ?? 0),
-                    'estoque' => $p->skus()->sum('estoque') ?? 0,
+                    'estoque' => $p->skus->sum('estoque') ?? 0,
                     'is_variation' => $isVariation,
                     'parent_name' => $parentName,
                     'variation_color' => $p->variation_color,

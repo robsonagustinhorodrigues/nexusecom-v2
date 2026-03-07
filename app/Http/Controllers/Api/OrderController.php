@@ -18,7 +18,7 @@ class OrderController extends Controller
     {
         $empresaId = $request->get('empresa_id', session('empresa_id', 6));
 
-        $query = MarketplacePedido::where('empresa_id', $empresaId);
+        $query = MarketplacePedido::where('empresa_id', $empresaId)->with('nfeEmitida');
 
         // Filters
         if ($request->search) {
@@ -55,9 +55,24 @@ class OrderController extends Controller
 
         $orders = $query->orderBy('data_compra', 'desc')->paginate(50);
 
+        // Gather all SKUs from orders
+        $skus = collect();
+        foreach ($orders as $order) {
+            $jsonData = $order->json_data ?? [];
+            $orderItems = $jsonData['order_items'] ?? [];
+            foreach ($orderItems as $item) {
+                if (!empty($item['item']['seller_sku'])) {
+                    $skus->push($item['item']['seller_sku']);
+                }
+            }
+        }
+        
+        $skusInfo = ProductSku::whereIn('sku', $skus->unique()->toArray())->get()->keyBy('sku');
+        $empresa = Empresa::find($empresaId);
+
         return response()->json([
-            'data' => $orders->map(function ($order) {
-                return $this->formatOrder($order);
+            'data' => $orders->map(function ($order) use ($skusInfo, $empresa) {
+                return $this->formatOrder($order, $skusInfo, $empresa);
             }),
             'current_page' => $orders->currentPage(),
             'last_page' => $orders->lastPage(),
@@ -67,16 +82,40 @@ class OrderController extends Controller
         ]);
     }
 
-    private function formatOrder($order)
+    private function formatOrder($order, $skusInfo = null, $empresa = null)
     {
         $taxas = floatval($order->valor_taxa_platform ?? 0)
                + floatval($order->valor_taxa_pagamento ?? 0)
                + floatval($order->valor_taxa_fixa ?? 0)
                + floatval($order->valor_outros ?? 0);
 
-        $lucro = $this->calculateLucro($order);
+        $valorImposto = floatval($order->valor_imposto ?? 0);
+        $valorProdutos = floatval($order->valor_produtos ?? 0);
+
+        // Fallback: Calculate tax dynamically if the database has 0, but the company has a tax rate
+        if ($valorImposto <= 0 && $empresa && floatval($empresa->aliquota_simples) > 0) {
+            $valorImposto = $valorProdutos * (floatval($empresa->aliquota_simples) / 100);
+        }
+
+        $itens = $this->getOrderItems($order, $skusInfo);
+
+        $custoTotal = array_sum(array_column($itens, 'custo_total'));
+        
+        // Ensure the calculated tax is deducted from the net profit presented on screen
+        $valorLiquido = floatval($order->valor_liquido ?? 0);
+        if ($valorImposto > 0 && floatval($order->valor_imposto ?? 0) <= 0) {
+             $valorLiquido -= $valorImposto; 
+        }
+
+        $valorFrete = floatval($order->valor_frete ?? 0);
+
+        $lucroValor = $valorLiquido - $custoTotal - $valorFrete;
+        $lucro = [
+            'valor' => $lucroValor,
+            'custo' => $custoTotal,
+        ];
+
         $lucroPercent = $this->calculateLucroPercent($order, $lucro);
-        $itens = $this->getOrderItems($order);
         $nfeVinculada = $this->hasNfe($order);
 
         $jsonData = $order->json_data ?? [];
@@ -89,14 +128,18 @@ class OrderController extends Controller
             $itemId = $firstItem['item']['id'] ?? null;
         }
 
+        $buyerNickname = $jsonData['buyer']['nickname'] ?? null;
+
         return [
             'id' => $order->id,
             'pedido_id' => $order->pedido_id,
+            'pack_id' => $jsonData['pack_id'] ?? null,
             'external_id' => $order->external_id,
             'marketplace' => $order->marketplace,
             'status' => $order->status,
             'status_pagamento' => $order->status_pagamento,
             'status_envio' => $order->status_envio,
+            'comprador_apelido' => $buyerNickname,
             'comprador_nome' => $order->comprador_nome,
             'comprador_email' => $order->comprador_email,
             'comprador_cpf' => $order->comprador_cpf,
@@ -109,9 +152,13 @@ class OrderController extends Controller
             'valor_total' => floatval($order->valor_total),
             'valor_frete' => floatval($order->valor_frete),
             'valor_desconto' => floatval($order->valor_desconto),
-            'valor_produtos' => floatval($order->valor_produtos),
+            'valor_produtos' => $valorProdutos,
             'taxas' => $taxas,
-            'valor_liquido' => floatval($order->valor_liquido),
+            'taxa_platform' => floatval($order->valor_taxa_platform ?? 0),
+            'taxa_pagamento' => floatval($order->valor_taxa_pagamento ?? 0),
+            'valor_imposto' => round($valorImposto, 2),
+            'aliquota_imposto' => $empresa ? floatval($empresa->aliquota_simples ?? 0) : 0,
+            'valor_liquido' => round($valorLiquido, 2),
             'custo_total' => $lucro['custo'],
             'lucro' => $lucro['valor'],
             'lucro_percent' => $lucroPercent,
@@ -135,33 +182,6 @@ class OrderController extends Controller
         ];
     }
 
-    private function calculateLucro($order)
-    {
-        $jsonData = $order->json_data ?? [];
-        $orderItems = $jsonData['order_items'] ?? [];
-
-        $custoTotal = 0;
-
-        foreach ($orderItems as $item) {
-            $sku = $item['item']['seller_sku'] ?? null;
-            $quantidade = $item['quantity'] ?? 1;
-
-            if ($sku) {
-                $productSku = ProductSku::where('sku', $sku)->first();
-                if ($productSku && $productSku->preco_custo) {
-                    $custoTotal += floatval($productSku->preco_custo) * $quantidade;
-                }
-            }
-        }
-
-        $valorLiquido = floatval($order->valor_liquido ?? 0);
-        $lucro = $valorLiquido - $custoTotal;
-
-        return [
-            'valor' => $lucro,
-            'custo' => $custoTotal,
-        ];
-    }
 
     private function calculateLucroPercent($order, $lucro)
     {
@@ -173,7 +193,7 @@ class OrderController extends Controller
         return round(($lucro['valor'] / $valorLiquido) * 100, 1);
     }
 
-    private function getOrderItems($order)
+    private function getOrderItems($order, $skusInfo = null)
     {
         $jsonData = $order->json_data ?? [];
         $orderItems = $jsonData['order_items'] ?? [];
@@ -190,16 +210,66 @@ class OrderController extends Controller
             $thumbnail = $item['item']['thumbnail'] ?? $item['item']['picture'] ?? null;
 
             $custoUnitario = 0;
+            $isKit = false;
+            $kitComponents = [];
+            
+            $isLinked = false;
+            $anuncioId = null;
+            $produtoId = null;
+
             if ($sku) {
-                $productSku = ProductSku::where('sku', $sku)->first();
-                if ($productSku && $productSku->preco_custo) {
-                    $custoUnitario = floatval($productSku->preco_custo);
+                $productSku = $skusInfo ? $skusInfo->where('sku', $sku)->first() : ProductSku::with('product')->where('sku', $sku)->first();
+                if ($productSku) {
+                    $isLinked = true;
+                    $produtoId = $productSku->product_id;
+                    if ($productSku->product && $productSku->product->tipo === 'composto') {
+                         $isKit = true;
+                         $components = \App\Models\ProductComponent::with('componentProduct')->where('product_id', $productSku->product->id)->get();
+                         foreach ($components as $comp) {
+                             $compSku = \App\Models\ProductSku::where('product_id', $comp->component_product_id)->first();
+                             $compCusto = $compSku ? floatval($compSku->preco_custo) : 0;
+                             $custoUnitario += $compCusto * $comp->quantity;
+                             $kitComponents[] = [
+                                 'nome' => $comp->componentProduct->nome ?? 'Componente',
+                                 'sku' => $compSku->sku ?? $comp->componentProduct->sku ?? '',
+                                 'quantidade' => $comp->quantity * $quantidade,
+                             ];
+                         }
+                    } else {
+                        $custoUnitario = floatval($productSku->preco_custo);
+                        if ($custoUnitario <= 0 && $productSku->product) {
+                            $custoUnitario = floatval($productSku->product->preco_custo);
+                        }
+                    }
+                }
+            }
+
+            // Fallback: If no SKU match, check if there's a mapped anuncio for this item_id
+            if (!$isLinked && $itemId) {
+                $anuncio = \App\Models\MarketplaceAnuncio::where('external_id', $itemId)->first();
+                if ($anuncio) {
+                    $anuncioId = $anuncio->id;
+                    if ($anuncio->product_sku_id) {
+                        $isLinked = true;
+                        $produtoId = \App\Models\ProductSku::find($anuncio->product_sku_id)->product_id ?? null;
+                        
+                        $fallbackP = \App\Models\ProductSku::with('product')->find($anuncio->product_sku_id);
+                        if ($fallbackP) {
+                            $custoUnitario = floatval($fallbackP->preco_custo);
+                            if ($custoUnitario <= 0 && $fallbackP->product) {
+                                $custoUnitario = floatval($fallbackP->product->preco_custo);
+                            }
+                        }
+                    }
                 }
             }
 
             $itens[] = [
                 'sku' => $sku,
                 'item_id' => $itemId,
+                'anuncio_id' => $anuncioId,
+                'produto_id' => $produtoId,
+                'is_linked' => $isLinked,
                 'titulo' => $titulo,
                 'titulo_reduzido' => mb_strimwidth($titulo, 0, 35, '...'),
                 'quantidade' => $quantidade,
@@ -208,6 +278,8 @@ class OrderController extends Controller
                 'custo_unitario' => $custoUnitario,
                 'custo_total' => $custoUnitario * $quantidade,
                 'thumbnail' => $thumbnail,
+                'is_kit' => $isKit,
+                'kit_components' => $kitComponents,
             ];
         }
 
@@ -222,7 +294,7 @@ class OrderController extends Controller
             return false;
         }
 
-        $nfe = NfeEmitida::where('pedido_marketplace', $pedidoId)->first();
+        $nfe = $order->nfeEmitida;
 
         return $nfe ? [
             'numero' => $nfe->numero,
@@ -234,8 +306,51 @@ class OrderController extends Controller
     public function show($id)
     {
         $order = MarketplacePedido::findOrFail($id);
+        $empresa = Empresa::find($order->empresa_id);
+        
+        // Use the proper formatted output rather than raw response
+        return response()->json($this->formatOrder($order, null, $empresa));
+    }
 
-        return response()->json($this->formatOrder($order));
+    public function linkItem(Request $request)
+    {
+        $request->validate([
+            'order_id' => 'required',
+            'item_id' => 'required|string',
+            'produto_id' => 'required|exists:products,id'
+        ]);
+
+        $order = MarketplacePedido::findOrFail($request->order_id);
+        
+        $anuncio = \App\Models\MarketplaceAnuncio::where('external_id', $request->item_id)
+            ->where('empresa_id', $order->empresa_id)
+            ->first();
+
+        if ($anuncio) {
+            $anuncio->update(['product_sku_id' => $request->produto_id]);
+        } else {
+            return response()->json(['error' => 'Anúncio correspondente não encontrado no banco de dados para vincular.'], 404);
+        }
+
+        // Optional: Update the sku in the order's json_data as well if needed
+        $jsonData = $order->json_data;
+        $productSku = \App\Models\ProductSku::where('product_id', $request->produto_id)->first();
+        if ($productSku && isset($jsonData['order_items'])) {
+            foreach ($jsonData['order_items'] as &$mItem) {
+                if (($mItem['item']['id'] ?? '') === $request->item_id) {
+                    $mItem['item']['seller_sku'] = $productSku->sku;
+                }
+            }
+            $order->update(['json_data' => $jsonData]);
+        }
+
+        $empresa = Empresa::find($order->empresa_id);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Produto vinculado com sucesso ao item do pedido.',
+            'order' => $this->formatOrder($order, null, $empresa)
+        ]);
     }
 
     public function update(Request $request, $id)

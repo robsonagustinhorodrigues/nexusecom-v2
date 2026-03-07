@@ -20,7 +20,8 @@ class ProductController extends Controller
         $grupoId = $empresa?->grupo_id;
 
         $query = Product::where('grupo_id', $grupoId)
-            ->with(['categoria', 'skus']);
+            ->whereNull('parent_id')
+            ->with(['categoria', 'skus', 'variations.skus', 'components.componentProduct']);
 
         if ($request->search) {
             $search = '%'.strtolower($request->search).'%';
@@ -54,7 +55,7 @@ class ProductController extends Controller
         $grupoId = $empresa?->grupo_id;
 
         $product = Product::where('grupo_id', $grupoId)
-            ->with(['categoria', 'skus', 'variations', 'components.componentProduct'])
+            ->with(['categoria', 'skus', 'variations', 'components.componentProduct.skus'])
             ->findOrFail($id);
 
         return response()->json($product);
@@ -136,14 +137,31 @@ class ProductController extends Controller
                     $varData['preco_custo'] = $var['preco_custo'] ?? $product->preco_custo;
                     $varData['marca'] = $var['marca'] ?? $product->marca;
                     $varData['ncm'] = $var['ncm'] ?? $product->ncm;
+                    $varData['peso'] = $var['peso'] ?? $product->peso;
+                    $varData['altura'] = $var['altura'] ?? $product->altura;
+                    $varData['largura'] = $var['largura'] ?? $product->largura;
+                    $varData['profundidade'] = $var['profundidade'] ?? $product->profundidade;
                 } else {
                     $varData['preco_venda'] = $product->preco_venda;
                     $varData['preco_custo'] = $product->preco_custo;
                     $varData['marca'] = $product->marca;
                     $varData['ncm'] = $product->ncm;
+                    $varData['peso'] = $product->peso;
+                    $varData['altura'] = $product->altura;
+                    $varData['largura'] = $product->largura;
+                    $varData['profundidade'] = $product->profundidade;
                 }
 
-                Product::create($varData);
+                $newVar = Product::create($varData);
+                
+                \App\Models\ProductSku::create([
+                    'product_id' => $newVar->id,
+                    'sku' => $varSku,
+                    'preco_venda' => $varData['preco_venda'],
+                    'preco_custo' => $varData['preco_custo'],
+                    'grupo_id' => $grupoId,
+                    'estoque' => 0
+                ]);
                 $varCounter++;
             }
         }
@@ -217,31 +235,42 @@ class ProductController extends Controller
         $tipo = $validated['tipo'];
 
         if ($tipo === 'variacao') {
-            // Delete ALL existing variations (children)
-            $product->variations()->delete();
+            $existingVariationsIds = $product->variations()->pluck('id')->toArray();
+            $keptVariationsIds = [];
 
-            // Create new variations if provided
             if ($request->has('variations') && $request->variations) {
                 $varCounter = 1;
                 foreach ($request->variations as $var) {
+                    $varId = $var['id'] ?? null;
                     $varNome = $var['nome'] ?? 'Variação '.$varCounter;
-                    $varSlug = $slug.'-'.Str::slug($varNome);
+                    
+                    if ($varId) {
+                        // Product already exists somewhere in DB
+                        $variationRecord = Product::where('grupo_id', $grupoId)->find($varId);
+                        if ($variationRecord) {
+                            $varSlug = $variationRecord->slug;
+                        } else {
+                            $varSlug = $slug.'-'.Str::slug($varNome);
+                        }
+                    } else {
+                        $varSlug = $slug.'-'.Str::slug($varNome);
+                        while (Product::where('slug', $varSlug)->where('id', '!=', $varId ?? 0)->where('grupo_id', $grupoId)->exists()) {
+                            $varSlug = $slug.'-'.Str::slug($varNome).'-'.$varCounter;
+                            $varCounter++;
+                        }
+                    }
+
                     $varSku = $var['sku'] ?? $request->sku.'-'.$varCounter;
                     $herdar = $var['herdar'] ?? true;
-
-                    while (Product::where('slug', $varSlug)->where('id', '!=', $product->id)->where('grupo_id', $grupoId)->exists()) {
-                        $varSlug = $slug.'-'.Str::slug($varNome).'-'.$varCounter;
-                        $varCounter++;
-                    }
 
                     $varData = [
                         'empresa_id' => $product->empresa_id,
                         'grupo_id' => $product->grupo_id, // Herdar grupo_id do pai
-                        'parent_id' => $product->id,
+                        'parent_id' => $product->id, // ATTACH TO PARENT
                         'nome' => $product->nome.' - '.$varNome,
                         'slug' => $varSlug,
                         'sku' => $varSku,
-                        'tipo' => 'simples',
+                        'tipo' => 'simples', // All variations intrinsically act as 'simples'
                         'variation_color' => $var['color'] ?? null,
                         'variation_size' => $var['size'] ?? null,
                         'herdar' => $herdar,
@@ -253,16 +282,76 @@ class ProductController extends Controller
                         $varData['preco_custo'] = $var['preco_custo'] ?? $product->preco_custo;
                         $varData['marca'] = $var['marca'] ?? $product->marca;
                         $varData['ncm'] = $var['ncm'] ?? $product->ncm;
+                        $varData['peso'] = $var['peso'] ?? $product->peso;
+                        $varData['altura'] = $var['altura'] ?? $product->altura;
+                        $varData['largura'] = $var['largura'] ?? $product->largura;
+                        $varData['profundidade'] = $var['profundidade'] ?? $product->profundidade;
                     } else {
                         $varData['preco_venda'] = $product->preco_venda;
                         $varData['preco_custo'] = $product->preco_custo;
                         $varData['marca'] = $product->marca;
                         $varData['ncm'] = $product->ncm;
+                        $varData['peso'] = $product->peso;
+                        $varData['altura'] = $product->altura;
+                        $varData['largura'] = $product->largura;
+                        $varData['profundidade'] = $product->profundidade;
                     }
 
-                    Product::create($varData);
+                    if ($varId && $variationRecord) {
+                        // UPDATE EXISTING (Either an existing attached variation, or a newly attached standalone product)
+                        $variationRecord->update($varData);
+                        $keptVariationsIds[] = $varId;
+                        
+                        $skuRecord = $variationRecord->skus()->where('sku', $varSku)->first() 
+                                     ?? $variationRecord->skus()->where('is_principal', true)->first() 
+                                     ?? $variationRecord->skus()->first();
+                                     
+                        if ($skuRecord) {
+                            $skuUpdatePayload = [
+                                'preco_venda' => $varData['preco_venda'],
+                                'preco_custo' => $varData['preco_custo']
+                            ];
+                            if ($skuRecord->sku !== $varSku) {
+                                $skuUpdatePayload['sku'] = $varSku;
+                            }
+                            $skuRecord->update($skuUpdatePayload);
+                        } else {
+                            // Failsafe: if product lacked a ProductSku relation, build it
+                            \App\Models\ProductSku::create([
+                                'product_id' => $variationRecord->id,
+                                'sku' => $varSku,
+                                'preco_venda' => $varData['preco_venda'],
+                                'preco_custo' => $varData['preco_custo'],
+                                'grupo_id' => $grupoId,
+                                'estoque' => 0
+                            ]);
+                        }
+                    } else {
+                        // CREATE BRAND NEW VARIATION
+                        $newVar = Product::create($varData);
+                        $keptVariationsIds[] = $newVar->id;
+                        
+                        \App\Models\ProductSku::create([
+                            'product_id' => $newVar->id,
+                            'sku' => $varSku,
+                            'preco_venda' => $varData['preco_venda'],
+                            'preco_custo' => $varData['preco_custo'],
+                            'grupo_id' => $grupoId,
+                            'estoque' => 0
+                        ]);
+                    }
                     $varCounter++;
                 }
+            }
+            
+            // DESVINCULAR AS VARIAÇÕES REMOVIDAS (NÃO DELETAR)
+            $variationsToDelete = array_diff($existingVariationsIds, $keptVariationsIds);
+            if (!empty($variationsToDelete)) {
+                Product::whereIn('id', $variationsToDelete)->each(function ($variation) {
+                    $variation->update(['parent_id' => null]);
+                    // Se quiser que o nome volte a ser o original, pode exigir uma lógica a mais.
+                    // Por hora, apenas desvincula, preservando estoques e skus.
+                });
             }
         }
 

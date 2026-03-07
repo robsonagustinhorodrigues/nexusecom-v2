@@ -175,11 +175,54 @@ class MeliService
                 Log::info("MeliService: {$fechados} anúncios marcados como fechados (não existem mais no ML)");
             }
 
+            // 4. Batch sync Visits API
+            if (!empty($itemIds)) {
+                $this->syncVisits($integracao, $itemIds);
+            }
+
             return count($itemIds);
 
         } catch (\Exception $e) {
             Log::error('Erro Sync ML Anuncios: '.$e->getMessage());
             throw $e;
+        }
+    }
+
+    /**
+     * Sincroniza as visitas de um lote de anúncios (máximo 50 itens)
+     */
+    public function syncVisits(Integracao $integracao, array $itemIds)
+    {
+        $accessToken = $integracao->access_token;
+        $chunks = array_chunk($itemIds, 50);
+
+        foreach ($chunks as $chunk) {
+            $idsParam = implode(',', $chunk);
+            try {
+                $response = Http::withToken($accessToken)
+                    ->get("https://api.mercadolibre.com/visits/items?ids={$idsParam}&window=LAST_30_DAYS");
+
+                if ($response->successful()) {
+                    $visitsData = $response->json();
+                    
+                    foreach ($visitsData as $itemId => $visitsCount) {
+                        $anuncio = MarketplaceAnuncio::where('integracao_id', $integracao->id)
+                            ->where('external_id', $itemId)
+                            ->first();
+                            
+                        if ($anuncio) {
+                            $jsonData = $anuncio->json_data ?? [];
+                            $jsonData['visits'] = $visitsCount;
+                            
+                            $anuncio->update([
+                                'json_data' => $jsonData
+                            ]);
+                        }
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::error('Erro ao sincronizar visitas ML: '.$e->getMessage());
+            }
         }
     }
 

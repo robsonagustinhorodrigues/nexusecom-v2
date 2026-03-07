@@ -75,7 +75,49 @@ class EstoqueMovimentacaoService
             return null;
         }
         
-        // Verificar estoque disponível
+        // Verifica se é um produto composto (Kit)
+        $sku = \App\Models\ProductSku::with('product')->find($skuId);
+        if ($sku && $sku->product && $sku->product->tipo === 'composto') {
+            $components = \App\Models\ProductComponent::where('product_id', $sku->product->id)->get();
+            if ($components->isNotEmpty()) {
+                Log::info("EstoqueMovimentacao: Pedido {$pedido->pedido_id} é um Kit. Desmembrando baixa...");
+                
+                $ultimaMov = null;
+                foreach ($components as $comp) {
+                    $compSku = \App\Models\ProductSku::where('product_id', $comp->component_product_id)->first();
+                    if ($compSku) {
+                        $qtdBaixar = $quantidade * $comp->quantity;
+                        
+                        $saldoComp = $this->getSaldo($compSku->id, $depositoId);
+                        if ($saldoComp < $qtdBaixar) {
+                            Log::warning("EstoqueMovimentacao: Saldo insuficiente para componente SKU {$compSku->id}. Saldo: {$saldoComp}, Solicitado: {$qtdBaixar}");
+                            continue;
+                        }
+                        
+                        $dados = [
+                            'product_sku_id' => $compSku->id,
+                            'deposito_id' => $depositoId,
+                            'quantidade' => $qtdBaixar,
+                            'tipo' => self::TIPO_SAIDA,
+                            'documento_tipo' => self::DOC_PEDIDO_VENDA,
+                            'documento' => $pedido->pedido_id,
+                            'pedido_id' => $pedido->id,
+                            'empresa_id' => $pedido->empresa_id,
+                            'origem' => 'pedido',
+                            'observacao' => "Baixa por pedido Kit: {$pedido->pedido_id} (Componente)",
+                        ];
+                        
+                        $ultimaMov = $this->registrarSaida($dados);
+                    }
+                }
+                
+                // Retorna a última movimentação como referência para evitar quebrar a assinatura, 
+                // mas registra a baixa em cada componente individualmente.
+                return $ultimaMov;
+            }
+        }
+        
+        // Verificar estoque disponível para produto normal
         $saldo = $this->getSaldo($skuId, $depositoId);
         
         if ($saldo < $quantidade) {
@@ -140,6 +182,40 @@ class EstoqueMovimentacaoService
         if (in_array($pedido->status, ['enviado', 'entregue', 'delivered', 'shipped'])) {
             Log::info("EstoqueMovimentacao: Pedido {$pedido->pedido_id} já enviado. Use NF de devolução para repor.");
             return null;
+        }
+        
+        // Verifica se é produto composto (Kit)
+        $sku = \App\Models\ProductSku::with('product')->find($skuId);
+        if ($sku && $sku->product && $sku->product->tipo === 'composto') {
+            $components = \App\Models\ProductComponent::where('product_id', $sku->product->id)->get();
+            if ($components->isNotEmpty()) {
+                Log::info("EstoqueMovimentacao: Pedido {$pedido->pedido_id} cancelado é um Kit. Desmembrando devolução...");
+                
+                $ultimaMov = null;
+                foreach ($components as $comp) {
+                    $compSku = \App\Models\ProductSku::where('product_id', $comp->component_product_id)->first();
+                    if ($compSku) {
+                        $qtdVoltar = $quantidade * $comp->quantity;
+                        
+                        $dados = [
+                            'product_sku_id' => $compSku->id,
+                            'deposito_id' => $depositoId,
+                            'quantidade' => $qtdVoltar,
+                            'tipo' => self::TIPO_ENTRADA,
+                            'documento_tipo' => 'pedido_cancelado',
+                            'documento' => $pedido->pedido_id,
+                            'pedido_id' => $pedido->id,
+                            'empresa_id' => $pedido->empresa_id,
+                            'origem' => 'pedido_cancelado',
+                            'observacao' => "Reposição Kit cancelado {$pedido->pedido_id} (Componente)",
+                        ];
+                        
+                        $ultimaMov = $this->registrarEntrada($dados);
+                    }
+                }
+                
+                return $ultimaMov;
+            }
         }
         
         $dados = [
@@ -227,6 +303,58 @@ class EstoqueMovimentacaoService
                 'saldo' => max(0, $novoSaldo)
             ]
         );
+        
+        $this->recalcularEstoqueCompostosBaseadoNoComponente($movimentacao->product_sku_id, $movimentacao->deposito_id);
+    }
+    
+    /**
+     * Atualiza o estoque de produtos compostos (Kits) quando o estoque de um componente muda.
+     */
+    private function recalcularEstoqueCompostosBaseadoNoComponente(int $componentSkuId, int $depositoId): void
+    {
+        try {
+            $componentSku = \App\Models\ProductSku::find($componentSkuId);
+            if (!$componentSku) return;
+            
+            // Buscar todos os Kits que possuem este componente
+            $components = \App\Models\ProductComponent::where('component_product_id', $componentSku->product_id)->get();
+            if ($components->isEmpty()) return;
+            
+            foreach ($components as $comp) {
+                $kitProduct = \App\Models\Product::find($comp->product_id);
+                if (!$kitProduct) continue;
+                
+                // Recalcula o estoque máximo do Kit baseado no menor divisor de seus componentes
+                $maxStock = $kitProduct->compound_max_stock;
+                
+                foreach ($kitProduct->skus as $kitSku) {
+                    $kitSku->update(['estoque' => $maxStock]);
+                    
+                    \App\Models\EstoqueSaldo::updateOrCreate(
+                        [
+                            'product_sku_id' => $kitSku->id,
+                            'deposito_id' => $depositoId,
+                        ],
+                        [
+                            'saldo' => $maxStock
+                        ]
+                    );
+
+                    // Sincroniza kit no marketplace
+                    $integracoes = \App\Models\MarketplaceAnuncio::where('produto_id', $kitProduct->id)
+                        ->where('empresa_id', $kitProduct->empresa_id)
+                        ->select('integracao_id')
+                        ->distinct()
+                        ->get();
+                        
+                    foreach ($integracoes as $int) {
+                        \App\Jobs\SyncProductMarketplaceJob::dispatch($kitProduct->id, $int->integracao_id, 'update');
+                    }
+                }
+            }
+        } catch (\Exception $e) {
+            Log::error("EstoqueMovimentacaoService: Erro ao recalcular estoque do Kit após mudança de componente: " . $e->getMessage());
+        }
     }
     
     /**

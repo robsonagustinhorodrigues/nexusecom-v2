@@ -228,6 +228,47 @@
                         </div>
                     </div>
                     
+                    <!-- Detalhes do Anúncio (Mercado Turbo) -->
+                    <div class="bg-slate-700/30 rounded-lg p-2 mb-3 text-xs">
+                        <div class="flex justify-between mb-1">
+                            <span class="text-slate-400">Tipo:</span>
+                            <span class="font-bold" 
+                                :class="anuncio.listing_type === 'gold_pro' ? 'text-amber-400' : 'text-blue-400'" 
+                                x-text="anuncio.listing_type === 'gold_pro' ? 'Premium' : (anuncio.listing_type === 'gold_special' ? 'Clássico' : anuncio.listing_type)">
+                            </span>
+                        </div>
+                        <div class="flex flex-col mb-1" x-show="anuncio.has_promotion">
+                            <div class="flex justify-between">
+                                <span class="text-slate-400">Promoção:</span>
+                                <span class="text-green-400 font-bold"><i class="fas fa-tag mr-1"></i><span x-text="formatMoney(anuncio.promocao_valor)"></span></span>
+                            </div>
+                            <div class="flex justify-between text-[10px]" x-show="anuncio.promocao_desconto > 0">
+                                <span class="text-slate-500">Rebate/Desconto:</span>
+                                <span class="text-emerald-500" x-text="formatMoney(anuncio.promocao_desconto)"></span>
+                            </div>
+                        </div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-slate-400">Tarifa de Venda:</span>
+                            <span class="text-amber-400" x-text="(anuncio.taxa_percent || 0).toFixed(1) + '%'"></span>
+                        </div>
+                        <div class="flex justify-between mb-1" x-show="anuncio.meli_date_created">
+                            <span class="text-slate-400">Criado em:</span>
+                            <span class="text-slate-300" x-text="anuncio.meli_date_created"></span>
+                        </div>
+                        <div class="flex justify-between" x-show="anuncio.meli_last_updated">
+                            <span class="text-slate-400">Atualizado:</span>
+                            <span class="text-slate-300" x-text="anuncio.meli_last_updated"></span>
+                        </div>
+                        <div class="flex justify-between mt-2 pt-2 border-t border-slate-600/50" x-show="anuncio.medidas && Object.keys(anuncio.medidas).length > 0">
+                            <span class="text-slate-400">Medidas:</span>
+                            <span class="text-slate-300 text-right text-[10px]">
+                                <span x-show="anuncio.medidas.peso" x-text="anuncio.medidas.peso" class="mr-1 font-bold text-amber-500/80"></span>
+                                <span x-show="anuncio.medidas.comprimento || anuncio.medidas.largura || anuncio.medidas.altura" 
+                                      x-text="'(' + (anuncio.medidas.comprimento || '-') + 'x' + (anuncio.medidas.largura || '-') + 'x' + (anuncio.medidas.altura || '-') + ')'"></span>
+                            </span>
+                        </div>
+                    </div>
+                    
                     <!-- Lucratividade -->
                     <div class="bg-slate-700/50 rounded-lg p-2 mb-3">
                         <div class="flex justify-between text-xs mb-1">
@@ -325,6 +366,9 @@
                 <tr>
                     <th class="px-4 py-3 text-left text-xs font-bold text-slate-400">Anúncio</th>
                     <th class="px-4 py-3 text-left text-xs font-bold text-slate-400">SKU</th>
+                    <th class="px-4 py-3 text-left text-xs font-bold text-slate-400">Tipo/Tarifa</th>
+                    <th class="px-4 py-3 text-center text-xs font-bold text-slate-400">Promoção</th>
+                    <th class="px-4 py-3 text-left text-xs font-bold text-slate-400">Datas</th>
                     <th class="px-4 py-3 text-right text-xs font-bold text-slate-400">Preço</th>
                     <th class="px-4 py-3 text-right text-xs font-bold text-slate-400">Custo</th>
                     <th class="px-4 py-3 text-right text-xs font-bold text-slate-400">Taxas</th>
@@ -400,6 +444,50 @@
                                 <button @click="copyToClipboard(anuncio.sku, 'SKU copiado!')" class="text-slate-500 hover:text-yellow-400" title="Copiar SKU" x-show="anuncio.sku">
                                     <i class="fas fa-copy text-xs"></i>
                                 </button>
+                            </div>
+                            <div class="mt-1 flex items-center gap-1 text-[10px]" x-show="anuncio.variation_id">
+                                <span class="font-bold text-purple-400 border border-purple-400/30 px-1 rounded">ID Var</span>
+                                <span class="text-slate-400" x-text="anuncio.variation_id"></span>
+                            </div>
+                        </td>
+                        <td class="px-4 py-3">
+                            <div class="flex flex-col gap-1">
+                                <span class="text-xs font-bold" :class="anuncio.listing_type === 'gold_pro' ? 'text-amber-400' : 'text-blue-400'" 
+                                    x-text="anuncio.listing_type === 'gold_pro' ? 'Premium' : (anuncio.listing_type === 'gold_special' ? 'Clássico' : anuncio.listing_type)"></span>
+                                <span class="text-[10px] text-slate-400" x-text="'Tarifa: ' + (anuncio.taxa_percent || 0).toFixed(1) + '%'"></span>
+                            </div>
+                        </td>
+                        <td class="px-4 py-3 text-center">
+                            <div class="flex flex-col items-center gap-1" x-show="anuncio.has_promotion">
+                                <span class="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400" title="Valor Promocional">
+                                    <i class="fas fa-tag mr-1"></i><span x-text="formatMoney(anuncio.promocao_valor)"></span>
+                                </span>
+                                <span class="text-[10px] text-emerald-500" x-show="anuncio.promocao_desconto > 0" x-text="'- ' + formatMoney(anuncio.promocao_desconto)"></span>
+                            </div>
+                            <span x-show="!anuncio.has_promotion" class="text-slate-600">-</span>
+                        </td>
+                        <td class="px-4 py-3">
+                            <div class="flex flex-col gap-1 text-[10px] whitespace-nowrap">
+                                <div class="flex items-center justify-between gap-2 mb-1 border-b border-slate-600/30 pb-1">
+                                    <div class="flex items-center gap-1" title="Vendas">
+                                        <i class="fas fa-shopping-cart text-green-500"></i> <span class="text-green-400 font-bold" x-text="anuncio.sold_quantity || 0"></span>
+                                    </div>
+                                    <div class="flex items-center gap-1" title="Visitas">
+                                        <i class="fas fa-eye text-blue-500"></i> <span class="text-blue-400 font-bold" x-text="anuncio.visits || 0"></span>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-1 text-slate-400" x-show="anuncio.meli_date_created" title="Data de Criação">
+                                    <i class="fas fa-calendar-plus w-3"></i> <span x-text="anuncio.meli_date_created"></span>
+                                </div>
+                                <div class="flex items-center gap-1 text-slate-500" x-show="anuncio.meli_last_updated" title="Última Atualização">
+                                    <i class="fas fa-history w-3"></i> <span x-text="anuncio.meli_last_updated"></span>
+                                </div>
+                                <div class="flex flex-col mt-1 pt-1 border-t border-slate-600/50" x-show="anuncio.medidas && Object.keys(anuncio.medidas).length > 0">
+                                    <span x-show="anuncio.medidas.peso" x-text="anuncio.medidas.peso" class="text-amber-500/80 font-bold" title="Peso"></span>
+                                    <span x-show="anuncio.medidas.comprimento || anuncio.medidas.largura || anuncio.medidas.altura" 
+                                          x-text="(anuncio.medidas.comprimento || '-') + 'x' + (anuncio.medidas.largura || '-') + 'x' + (anuncio.medidas.altura || '-')"
+                                          class="text-slate-400" title="Comp/Larg/Alt"></span>
+                                </div>
                             </div>
                         </td>
                         <td class="px-4 py-3 text-right font-bold text-white" x-text="formatMoney(anuncio.preco)"></td>
