@@ -403,7 +403,10 @@ class OrderController extends Controller
                     ], 400);
                 }
 
-                $result = $service->syncOrders();
+                $result = $service->syncOrders(
+                    $request->get('data_de'),
+                    $request->get('data_ate')
+                );
 
                 return response()->json($result);
             }

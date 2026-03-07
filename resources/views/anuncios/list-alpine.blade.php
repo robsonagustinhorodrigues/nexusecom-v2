@@ -810,7 +810,32 @@ function anunciosPage() {
                 this.loadAnuncios();
             });
             
+            this.initFromUrl();
             this.loadAnuncios();
+        },
+
+        initFromUrl() {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('marketplace')) this.marketplace = urlParams.get('marketplace');
+            if (urlParams.has('status')) this.statusFilter = urlParams.get('status');
+            if (urlParams.has('tipo')) this.tipoFilter = urlParams.get('tipo');
+            if (urlParams.has('vinculo')) this.vinculoFilter = urlParams.get('vinculo');
+            if (urlParams.has('repricer')) this.repricerFilter = urlParams.get('repricer');
+            if (urlParams.has('search')) this.search = urlParams.get('search');
+            // if (urlParams.has('page')) this.currentPage = parseInt(urlParams.get('page')); // Se houver paginação no futuro
+        },
+
+        updateUrlParams() {
+            const params = new URLSearchParams();
+            if (this.marketplace) params.set('marketplace', this.marketplace);
+            if (this.statusFilter) params.set('status', this.statusFilter);
+            if (this.tipoFilter) params.set('tipo', this.tipoFilter);
+            if (this.vinculoFilter) params.set('vinculo', this.vinculoFilter);
+            if (this.repricerFilter) params.set('repricer', this.repricerFilter);
+            if (this.search) params.set('search', this.search);
+
+            const newRelativePathQuery = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+            history.replaceState(null, '', newRelativePathQuery);
         },
         
         async loadAnuncios() {
@@ -832,6 +857,8 @@ function anunciosPage() {
                 const data = await response.json();
                 console.log('Data received:', data);
                 this.anuncios = data.data || data;
+
+                this.updateUrlParams();
             } catch (e) {
                 console.error('Error:', e);
             }

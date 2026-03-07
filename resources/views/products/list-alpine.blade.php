@@ -119,7 +119,12 @@
                             </div>
                             <div x-show="!row.isParent">
                                 <div class="w-10 h-10 bg-black/40 rounded-md overflow-hidden border border-slate-700/80 flex items-center justify-center">
-                                    <i class="fas text-xs" :class="row.parentTipo === 'composto' ? 'fa-boxes text-amber-500/50' : 'fa-layer-group text-indigo-500/50'"></i>
+                                    <template x-if="row.foto">
+                                        <img :src="row.foto" class="w-full h-full object-cover">
+                                    </template>
+                                    <template x-if="!row.foto">
+                                        <i class="fas text-xs" :class="row.parentTipo === 'composto' ? 'fa-boxes text-amber-500/50' : 'fa-layer-group text-indigo-500/50'"></i>
+                                    </template>
                                 </div>
                             </div>
                         </td>
@@ -285,6 +290,7 @@ function productsPage() {
                         uniqueId: 'var-' + v.id,
                         edit_id: v.id,
                         titulo: v.nome || 'Variação',
+                        foto: v.foto_principal || product.foto_principal,
                         sku: firstSku.sku || v.sku || '',
                         label: ((v.variation_size || '') + ' ' + (v.variation_color || '')).trim() || 'Variação',
                         preco_custo: firstSku.preco_custo || v.preco_custo || product.preco_custo,
@@ -300,6 +306,7 @@ function productsPage() {
                         uniqueId: 'comp-' + c.id,
                         edit_id: childData.id,
                         titulo: childData.nome || 'Componente',
+                        foto: childData.foto_principal,
                         sku: childData.sku || '',
                         label: c.quantity + 'x Unidades',
                         preco_custo: childData.preco_custo || 0,

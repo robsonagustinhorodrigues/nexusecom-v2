@@ -101,7 +101,12 @@
                     <button x-show="hasMeliIntegration" @click="syncOrders('mercadolivre'); syncDropdownOpen = false" :disabled="syncing" 
                         class="w-full px-4 py-3 text-left text-sm text-slate-200 hover:bg-slate-700 flex items-center gap-3 disabled:opacity-50">
                         <i class="fab fa-mercadolivre text-yellow-400 text-lg"></i>
-                        <span x-text="syncing ? 'Sincronizando...' : 'Sincronizar Mercado Livre'"></span>
+                        <span x-text="syncing ? 'Sincronizando...' : 'Sincronizar Mercado Livre (Recentes)'"></span>
+                    </button>
+                    <button x-show="hasMeliIntegration" @click="syncOrders('mercadolivre', true); syncDropdownOpen = false" :disabled="syncing" 
+                        class="w-full px-4 py-3 text-left text-sm text-slate-200 hover:bg-slate-700 flex items-center gap-3 border-t border-slate-700 disabled:opacity-50">
+                        <i class="fas fa-calendar-alt text-indigo-400 text-lg"></i>
+                        <span x-text="syncing ? 'Sincronizando...' : 'Sincronizar por Período'"></span>
                     </button>
                 </div>
             </div>
@@ -459,7 +464,12 @@
                 </button>
             </div>
             <div class="flex-1 overflow-auto p-4">
-                <pre class="text-xs text-green-400 font-mono whitespace-pre-wrap" x-text="JSON.stringify(currentJson, null, 2)"></pre>
+                <div class="space-y-4">
+                    <div>
+                        <h4 class="text-indigo-400 font-bold mb-1 uppercase text-[10px] tracking-widest">Dados do Pedido (Order)</h4>
+                        <pre class="bg-slate-900/50 p-3 rounded border border-slate-700 text-xs text-green-400 font-mono whitespace-pre-wrap" x-text="JSON.stringify(currentJson, null, 2)"></pre>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -610,8 +620,36 @@ function ordersPage() {
                 this.loadIntegrations();
             });
             
-            this.loadOrders();
+            this.initFromUrl();
+            this.loadOrders(false);
             this.loadIntegrations();
+        },
+
+        initFromUrl() {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('search')) this.search = urlParams.get('search');
+            if (urlParams.has('status')) this.status = urlParams.get('status');
+            if (urlParams.has('status_envio')) this.statusEnvio = urlParams.get('status_envio');
+            if (urlParams.has('logistics')) this.logistics = urlParams.get('logistics');
+            if (urlParams.has('marketplace')) this.marketplace = urlParams.get('marketplace');
+            if (urlParams.has('data_de')) this.dataDe = urlParams.get('data_de');
+            if (urlParams.has('data_ate')) this.dataAte = urlParams.get('data_ate');
+            if (urlParams.has('page')) this.currentPage = parseInt(urlParams.get('page'));
+        },
+
+        updateUrlParams() {
+            const params = new URLSearchParams();
+            if (this.search) params.set('search', this.search);
+            if (this.status) params.set('status', this.status);
+            if (this.statusEnvio) params.set('status_envio', this.statusEnvio);
+            if (this.logistics) params.set('logistics', this.logistics);
+            if (this.marketplace) params.set('marketplace', this.marketplace);
+            if (this.dataDe) params.set('data_de', this.dataDe);
+            if (this.dataAte) params.set('data_ate', this.dataAte);
+            if (this.currentPage > 1) params.set('page', this.currentPage);
+
+            const newRelativePathQuery = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+            history.replaceState(null, '', newRelativePathQuery);
         },
         
         async loadIntegrations() {
@@ -650,6 +688,8 @@ function ordersPage() {
                 this.total = result.total || 0;
                 this.from = result.from || 0;
                 this.to = result.to || 0;
+
+                this.updateUrlParams();
                 this.selectedOrders = [];
             } catch (e) {
                 console.error('Error:', e);
@@ -669,10 +709,16 @@ function ordersPage() {
             return document.querySelector('meta[name="csrf-token"]')?.content || '';
         },
         
-        async syncOrders(marketplace = 'mercadolivre') {
+        async syncOrders(marketplace = 'mercadolivre', usePeriod = false) {
             this.syncing = true;
             try {
-                const response = await fetch(`/api/orders/sync?empresa_id=${this.empresaId}&marketplace=${marketplace}`, { 
+                let url = `/api/orders/sync?empresa_id=${this.empresaId}&marketplace=${marketplace}`;
+                
+                if (usePeriod) {
+                    url += `&data_de=${this.dataDe}&data_ate=${this.dataAte}`;
+                }
+
+                const response = await fetch(url, { 
                     method: 'POST',
                     headers: {
                         'X-CSRF-TOKEN': this.getCsrfToken(),

@@ -371,8 +371,9 @@ class MeliIntegrationService
         }
     }
 
-    public function syncOrders(int $limit = 50): array
+    public function syncOrders(?string $dateFrom = null, ?string $dateTo = null): array
     {
+        $limit = 50;
         if (! $this->isConnected()) {
             return ['success' => false, 'message' => 'Meli não conectado'];
         }
@@ -383,18 +384,28 @@ class MeliIntegrationService
             $maxPages = 5;
             $maxOrders = 250;
 
-            Log::info('Meli syncOrders started - maxPages: '.$maxPages.' maxOrders: '.$maxOrders);
+            $params = [
+                'limit' => $limit,
+                'sort' => 'date_desc',
+            ];
+
+            if ($dateFrom) {
+                // Mercado Livre pede ISO8601. Ex: 2024-03-01T00:00:00.000-00:00
+                $params['order_created_from'] = \Carbon\Carbon::parse($dateFrom)->startOfDay()->toIso8601String();
+            }
+
+            if ($dateTo) {
+                $params['order_created_to'] = \Carbon\Carbon::parse($dateTo)->endOfDay()->toIso8601String();
+            }
+
+            Log::info('Meli syncOrders started - params: ' . json_encode($params));
 
             while ($page < $maxPages && $imported < $maxOrders) {
-                $offset = $page * $limit;
+                $params['offset'] = $page * $limit;
 
-                Log::info('Meli syncOrders - fetching page '.$page.' offset '.$offset);
+                Log::info('Meli syncOrders - fetching page '.$page.' offset '.$params['offset']);
 
-                $result = $this->getOrders([
-                    'limit' => $limit,
-                    'offset' => $offset,
-                    'sort' => 'date_desc',
-                ]);
+                $result = $this->getOrders($params);
 
                 if (isset($result['error'])) {
                     Log::error('Meli syncOrders - error: '.$result['error']);
@@ -539,6 +550,9 @@ class MeliIntegrationService
         if ($shipmentId) {
             $shippingCosts = $this->getShipmentCosts($shipmentId);
             $valorFrete = floatval($shippingCosts['sender_cost'] ?? 0);
+            
+            // Adicionar dados completos de custo ao orderData para visualização no JSON técnico
+            $orderData['shipping_costs_details'] = $shippingCosts;
         }
         // Fallback: usar shipping_cost do order se a API de costs não retornou nada
         if ($valorFrete <= 0 && !empty($orderData['shipping_cost'])) {
@@ -858,19 +872,19 @@ class MeliIntegrationService
             ])->get("https://api.mercadolibre.com/shipments/{$shipmentId}/costs");
 
             if ($response->successful()) {
-                $data = $response->json();
+                $costs = $response->json();
                 $senderCost = 0;
                 
-                if (!empty($data['senders'])) {
-                    foreach ($data['senders'] as $sender) {
+                if (!empty($costs['senders'])) {
+                    foreach ($costs['senders'] as $sender) {
                         $senderCost += floatval($sender['cost'] ?? 0);
                     }
                 }
 
                 return [
                     'sender_cost' => $senderCost,
-                    'gross_amount' => floatval($data['gross_amount'] ?? 0),
-                    'raw' => $data,
+                    'receiver_cost' => floatval($costs['receiver'][0]['cost'] ?? 0),
+                    'full_response' => $costs,
                 ];
             }
 

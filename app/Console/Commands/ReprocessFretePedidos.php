@@ -64,7 +64,6 @@ class ReprocessFretePedidos extends Command
                     continue;
                 }
 
-                // Extrair shipping_id do json_data
                 $jd = $pedido->json_data ?? [];
                 $shipmentId = $jd['shipping']['id'] ?? null;
 
@@ -73,23 +72,18 @@ class ReprocessFretePedidos extends Command
                     continue;
                 }
 
-                // Chamar o endpoint /shipments/{id}/costs que retorna o custo real do vendedor
                 $response = Http::withHeaders([
                     'Authorization' => 'Bearer ' . $token,
                 ])->get("https://api.mercadolibre.com/shipments/{$shipmentId}/costs");
 
                 if (!$response->successful()) {
                     $erros++;
-                    $this->line(" Pedido {$pedido->pedido_id}: Erro HTTP " . $response->status());
                     $bar->advance();
-                    // Rate limit - esperar um pouco
-                    usleep(500000); // 500ms
+                    usleep(500000); 
                     continue;
                 }
 
                 $costsData = $response->json();
-                
-                // O custo real do vendedor está em senders[0].cost
                 $senderCost = 0;
                 if (!empty($costsData['senders'])) {
                     foreach ($costsData['senders'] as $sender) {
@@ -97,24 +91,31 @@ class ReprocessFretePedidos extends Command
                     }
                 }
 
-                // gross_amount é o custo total do frete (independente de quem paga)
                 $grossAmount = floatval($costsData['gross_amount'] ?? 0);
 
-                if ($senderCost > 0) {
-                    $pedido->update([
-                        'valor_frete' => $senderCost,
-                    ]);
-                    $atualizados++;
-                    $this->line(" Pedido {$pedido->pedido_id}: Frete Vendedor R$ " . number_format($senderCost, 2, ',', '.') . " (total R$ " . number_format($grossAmount, 2, ',', '.') . ")");
-                } else {
-                    $zerados++;
-                    if ($this->getOutput()->isVerbose()) {
-                        $this->line(" Pedido {$pedido->pedido_id}: Frete R$ 0 (ML absorveu R$ " . number_format($grossAmount, 2, ',', '.') . ")");
+                if ($senderCost > 0 || $grossAmount > 0) {
+                    $jd['shipping_costs_details'] = [
+                        'sender_cost' => $senderCost,
+                        'receiver_cost' => floatval($costsData['receiver'][0]['cost'] ?? 0),
+                        'full_response' => $costsData
+                    ];
+                    
+                    $pedido->valor_frete = $senderCost;
+                    $pedido->json_data = $jd;
+                    $pedido->save();
+
+                    if ($senderCost > 0) {
+                        $atualizados++;
+                        $this->line(" Pedido {$pedido->pedido_id}: Frete Vendedor R$ " . number_format($senderCost, 2, ',', '.') . " (total R$ " . number_format($grossAmount, 2, ',', '.') . ")");
+                    } else {
+                        $zerados++;
+                        if ($this->getOutput()->isVerbose()) {
+                             $this->line(" Pedido {$pedido->pedido_id}: Frete R$ 0 (ML absorveu R$ " . number_format($grossAmount, 2, ',', '.') . ")");
+                        }
                     }
                 }
 
-                // Rate limit - esperar entre requests
-                usleep(300000); // 300ms
+                usleep(300000); 
 
             } catch (\Exception $e) {
                 $erros++;
