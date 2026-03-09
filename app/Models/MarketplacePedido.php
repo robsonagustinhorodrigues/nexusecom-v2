@@ -36,6 +36,8 @@ class MarketplacePedido extends Model
         'valor_imposto',
         'valor_outros',
         'valor_liquido',
+        'lucro',
+        'custo_total',
         'data_compra',
         'data_pagamento',
         'data_envio',
@@ -43,6 +45,10 @@ class MarketplacePedido extends Model
         'codigo_rastreamento',
         'url_rastreamento',
         'json_data',
+        'order_json',
+        'cart_json',
+        'payments_json',
+        'shipments_json',
         'imported_at',
         'import_hash',
         'import_confirmed',
@@ -70,7 +76,13 @@ class MarketplacePedido extends Model
             'valor_imposto' => 'decimal:2',
             'valor_outros' => 'decimal:2',
             'valor_liquido' => 'decimal:2',
+            'lucro' => 'decimal:2',
+            'custo_total' => 'decimal:2',
             'json_data' => 'array',
+            'order_json' => 'array',
+            'cart_json' => 'array',
+            'payments_json' => 'array',
+            'shipments_json' => 'array',
         ];
     }
 

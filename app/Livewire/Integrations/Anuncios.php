@@ -57,29 +57,69 @@ class Anuncios extends Component
     {
         $empresaId = Auth::user()->current_empresa_id;
 
-        $integracao = Integracao::where('empresa_id', $empresaId)
+        // Mercado Livre Sync
+        $integracaoMeli = Integracao::where('empresa_id', $empresaId)
             ->where('marketplace', 'mercadolivre')
             ->where('ativo', true)
             ->first();
 
-        if ($integracao) {
-            $this->isSyncing = true;
-            $this->syncProgress = 'Sincronizando anúncios...';
-
-            try {
-                $meliService = new \App\Services\MeliService;
-                $meliService->syncAnuncios($integracao);
-                $this->syncProgress = 'Sincronizando fretes...';
-                $meliService->syncFreteAnuncios($integracao, 50);
-                $this->syncProgress = 'Sincronizando promoções...';
-                $this->syncPromocoes($integracao);
-            } catch (\Exception $e) {
-                \Log::error('Erro sync anuncios: '.$e->getMessage());
-            }
-
-            $this->isSyncing = false;
-            $this->syncProgress = '';
+        if ($integracaoMeli) {
+            $this->syncMeli($integracaoMeli);
         }
+
+        // Amazon Sync (Optional on load, maybe just check if we have listings)
+        $integracaoAmazon = Integracao::where('empresa_id', $empresaId)
+            ->where('marketplace', 'amazon')
+            ->where('ativo', true)
+            ->first();
+        
+        if ($integracaoAmazon && MarketplaceAnuncio::where('empresa_id', $empresaId)->where('marketplace', 'amazon')->count() === 0) {
+            $this->syncAmazon();
+        }
+    }
+
+    public function syncMeli($integracao)
+    {
+        $this->isSyncing = true;
+        $this->syncProgress = 'Sincronizando Mercado Livre...';
+
+        try {
+            $meliService = new \App\Services\MeliService;
+            $meliService->syncAnuncios($integracao);
+            $this->syncProgress = 'Sincronizando fretes...';
+            $meliService->syncFreteAnuncios($integracao, 50);
+            $this->syncProgress = 'Sincronizando promoções...';
+            $this->syncPromocoes($integracao);
+        } catch (\Exception $e) {
+            \Log::error('Erro sync meli: '.$e->getMessage());
+        }
+
+        $this->isSyncing = false;
+        $this->syncProgress = '';
+    }
+
+    public function syncAmazon()
+    {
+        $empresaId = Auth::user()->current_empresa_id;
+        $this->isSyncing = true;
+        $this->syncProgress = 'Sincronizando Amazon (Reports API)...';
+
+        try {
+            $service = new \App\Services\AmazonSpApiService($empresaId);
+            $result = $service->syncListings();
+            
+            if ($result['success']) {
+                $this->dispatch('notify', ['type' => 'success', 'message' => $result['message']]);
+            } else {
+                $this->dispatch('notify', ['type' => 'warning', 'message' => $result['message']]);
+            }
+        } catch (\Exception $e) {
+            \Log::error('Erro sync amazon: '.$e->getMessage());
+            $this->dispatch('notify', ['type' => 'error', 'message' => 'Erro ao sincronizar Amazon: ' . $e->getMessage()]);
+        }
+
+        $this->isSyncing = false;
+        $this->syncProgress = '';
     }
 
     public function syncPromocoes($integracao)
@@ -128,26 +168,24 @@ class Anuncios extends Component
     {
         $empresaId = Auth::user()->current_empresa_id;
 
-        $integracao = Integracao::where('empresa_id', $empresaId)
+        // Sync Mercado Livre
+        $integracaoMeli = Integracao::where('empresa_id', $empresaId)
             ->where('marketplace', 'mercadolivre')
             ->where('ativo', true)
             ->first();
 
-        if ($integracao) {
-            $this->isSyncing = true;
-            $this->syncProgress = 'Sincronizando anúncios...';
+        if ($integracaoMeli) {
+            $this->syncMeli($integracaoMeli);
+        }
 
-            try {
-                $meliService = new \App\Services\MeliService;
-                $meliService->syncAnuncios($integracao);
-                $this->syncProgress = 'Sincronizando fretes...';
-                $meliService->syncFreteAnuncios($integracao, 50);
-            } catch (\Exception $e) {
-                \Log::error('Erro sync anuncios: '.$e->getMessage());
-            }
+        // Sync Amazon
+        $integracaoAmazon = Integracao::where('empresa_id', $empresaId)
+            ->where('marketplace', 'amazon')
+            ->where('ativo', true)
+            ->first();
 
-            $this->isSyncing = false;
-            $this->syncProgress = '';
+        if ($integracaoAmazon) {
+            $this->syncAmazon();
         }
     }
 
@@ -159,33 +197,6 @@ class Anuncios extends Component
             return new \Illuminate\Pagination\LengthAwarePaginator([], 0, 10);
         }
 
-        // Get active integration for this empresa
-        $integracao = Integracao::where('empresa_id', $empresaId)
-            ->where('marketplace', 'mercadolivre')
-            ->where('ativo', true)
-            ->first();
-
-        // If has ML integration, read from database (sync feito via comando ou manualmente)
-        if ($integracao) {
-            return MarketplaceAnuncio::tenant($empresaId)
-                ->where('marketplace', 'mercadolivre')
-                ->when($this->search, fn ($q) => $q->where(function ($query) {
-                    $searchTerm = '%'.mb_strtolower($this->search, 'UTF-8').'%';
-                    $query->whereRaw('LOWER(titulo) LIKE ?', [$searchTerm])
-                        ->orWhereRaw('LOWER(external_id) LIKE ?', [$searchTerm])
-                        ->orWhereRaw('LOWER(sku) LIKE ?', [$searchTerm]);
-                }))
-                ->when($this->status_filtro === 'ativo', fn ($q) => $q->where('status', 'active'))
-                ->when($this->status_filtro === 'inativo', fn ($q) => $q->where('status', 'inactive'))
-                ->when($this->tipo_filtro === 'catalogo', fn ($q) => $q->where('json_data->catalog_listing', true))
-                ->when($this->vinculo_filtro === 'vinculado', fn ($q) => $q->whereNotNull('product_sku_id'))
-                ->when($this->vinculo_filtro === 'nao_vinculado', fn ($q) => $q->whereNull('product_sku_id'))
-                ->with(['productSku.product', 'integracao'])
-                ->latest()
-                ->paginate(15);
-        }
-
-        // Fallback: read from database (for other marketplaces or if no integration)
         return MarketplaceAnuncio::tenant($empresaId)
             ->when($this->search, fn ($q) => $q->where(function ($query) {
                 $searchTerm = '%'.mb_strtolower($this->search, 'UTF-8').'%';
@@ -196,8 +207,11 @@ class Anuncios extends Component
             ->when($this->integracao_id, fn ($q) => $q->where('integracao_id', $this->integracao_id))
             ->when($this->marketplace_filtro, fn ($q) => $q->where('marketplace', $this->marketplace_filtro))
             ->when($this->status_filtro === 'ativo', fn ($q) => $q->where('status', 'active'))
-            ->when($this->status_filtro === 'inativo', fn ($q) => $q->where('status', 'inactive'))
-            ->when($this->tipo_filtro === 'catalogo', fn ($q) => $q->where('json_data->catalog_listing', true))
+            ->when($this->status_filtro === 'inativo', fn ($q) => $q->where('status', '!=', 'active'))
+            ->when($this->tipo_filtro === 'catalogo', fn ($q) => $q->where(function($sq) {
+                $sq->where('json_data->catalog_listing', true)
+                   ->orWhere('json_data->ASIN', '!=', null); // Amazon specific catalog indicator
+            }))
             ->when($this->vinculo_filtro === 'vinculado', fn ($q) => $q->whereNotNull('product_sku_id'))
             ->when($this->vinculo_filtro === 'nao_vinculado', fn ($q) => $q->whereNull('product_sku_id'))
             ->with(['productSku.product', 'integracao'])

@@ -277,12 +277,20 @@ Route::prefix('api')->middleware('auth')->group(function () {
     Route::get('/orders/integrations', [App\Http\Controllers\Api\OrderController::class, 'integrations']);
     Route::post('/orders/sync', [App\Http\Controllers\Api\OrderController::class, 'sync']);
     Route::post('/orders/{id}/refresh', [App\Http\Controllers\Api\OrderController::class, 'refresh']);
+    Route::post('/orders/recalculate', [App\Http\Controllers\Api\OrderController::class, 'recalculate']);
     Route::get('/orders/{id}', [App\Http\Controllers\Api\OrderController::class, 'show']);
     Route::put('/orders/{id}', [App\Http\Controllers\Api\OrderController::class, 'update']);
     Route::get('/orders/{id}/danfe', [App\Http\Controllers\Api\OrderController::class, 'danfe']);
     Route::get('/orders/{id}/danfe-simplificada', [App\Http\Controllers\Api\OrderController::class, 'danfeSimplificada']);
     Route::get('/orders/{id}/etiqueta', [App\Http\Controllers\Api\OrderController::class, 'etiqueta']);
     Route::get('/orders/{id}/etiqueta-meli', [App\Http\Controllers\Api\OrderController::class, 'etiquetaMeli']);
+    Route::get('/dashboard/lucratividade', [App\Http\Controllers\Api\DashboardController::class, 'lucratividade']);
+    Route::get('/dashboard/vendas-diarias', [App\Http\Controllers\Api\DashboardController::class, 'vendasDiarias']);
+    Route::get('/dashboard/vendas-marketplace', [App\Http\Controllers\Api\DashboardController::class, 'vendasPorMarketplace']);
+    Route::get('/dashboard/atividade-horaria', [App\Http\Controllers\Api\DashboardController::class, 'atividadeHoraria']);
+    Route::get('/dashboard/top-produtos', [App\Http\Controllers\Api\DashboardController::class, 'topProdutos']);
+    Route::get('/dashboard/pedidos-recentes', [App\Http\Controllers\Api\DashboardController::class, 'pedidosRecentes']);
+    Route::get('/dashboard/vendas-negativas', [App\Http\Controllers\Api\DashboardController::class, 'vendasNegativas']);
     Route::post('/orders/link-item', [App\Http\Controllers\Api\OrderController::class, 'linkItem']);
 
     Route::get('/nfes', [App\Http\Controllers\Api\NfeController::class, 'index']);

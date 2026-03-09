@@ -10,10 +10,21 @@ use App\Models\NfeEmitida;
 use App\Models\ProductSku;
 use App\Services\DanfeService;
 use App\Services\MeliIntegrationService;
+use App\Services\AmazonSpApiService;
+use App\Services\OrderProfitService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 class OrderController extends Controller
 {
+    private OrderProfitService $profitService;
+
+    public function __construct()
+    {
+        $this->profitService = new OrderProfitService();
+    }
+
+
     public function index(Request $request)
     {
         $empresaId = $request->get('empresa_id', session('empresa_id', 6));
@@ -53,7 +64,30 @@ class OrderController extends Controller
             $query->where('json_data', 'like', '%"mode":"'.$request->logistics.'"%');
         }
 
-        $orders = $query->orderBy('data_compra', 'desc')->paginate(50);
+        // Sorting
+        $allowedSortFields = [
+            'data_compra' => 'data_compra',
+            'valor_total' => 'valor_total',
+            'lucro' => 'lucro',
+            'lucro_percent' => 'lucro_percent',
+            'valor_produtos' => 'valor_produtos',
+        ];
+
+        $sortBy = $request->get('sort_by');
+        $sortDir = strtolower($request->get('sort_dir')) === 'asc' ? 'asc' : 'desc';
+
+        if ($sortBy === 'lucro_percent') {
+            $query->orderByRaw('CASE WHEN valor_total > 0 THEN lucro / valor_total ELSE 0 END ' . $sortDir);
+        } else {
+            $column = $allowedSortFields[$sortBy] ?? 'data_compra';
+            $query->orderBy($column, $sortDir);
+        }
+
+        // Calculate global totals for filtered query
+        $totalsQuery = clone $query;
+        $stats = $totalsQuery->reorder()->selectRaw('COUNT(*) as total_pedidos, SUM(valor_total) as total_faturamento, SUM(lucro) as total_lucro')->first();
+
+        $orders = $query->paginate(50);
 
         // Gather all SKUs from orders
         $skus = collect();
@@ -79,6 +113,11 @@ class OrderController extends Controller
             'total' => $orders->total(),
             'from' => $orders->firstItem(),
             'to' => $orders->lastItem(),
+            'stats' => [
+                'total_pedidos' => $stats->total_pedidos,
+                'total_faturamento' => $stats->total_faturamento,
+                'total_lucro' => $stats->total_lucro,
+            ],
         ]);
     }
 
@@ -92,36 +131,23 @@ class OrderController extends Controller
         $valorImposto = floatval($order->valor_imposto ?? 0);
         $valorProdutos = floatval($order->valor_produtos ?? 0);
 
-        // Fallback: Calculate tax dynamically if the database has 0, but the company has a tax rate
         if ($valorImposto <= 0 && $empresa && floatval($empresa->aliquota_simples) > 0) {
             $valorImposto = $valorProdutos * (floatval($empresa->aliquota_simples) / 100);
         }
 
-        $itens = $this->getOrderItems($order, $skusInfo);
+        $profit = $this->profitService->calculateOrderProfit($order, $empresa, $skusInfo);
+        $itens = $profit['itens'];
+        $valorLiquido = $profit['valor_liquido'];
+        $valorFrete = $profit['valor_frete'];
+        $lucroValor = $profit['lucro_valor'];
+        $lucroPercent = $profit['lucro_percent'];
+        $custoTotal = $profit['custo_total'];
 
-        $custoTotal = array_sum(array_column($itens, 'custo_total'));
-        
-        // Ensure the calculated tax is deducted from the net profit presented on screen
-        $valorLiquido = floatval($order->valor_liquido ?? 0);
-        if ($valorImposto > 0 && floatval($order->valor_imposto ?? 0) <= 0) {
-             $valorLiquido -= $valorImposto; 
-        }
-
-        $valorFrete = floatval($order->valor_frete ?? 0);
-
-        $lucroValor = $valorLiquido - $custoTotal - $valorFrete;
-        $lucro = [
-            'valor' => $lucroValor,
-            'custo' => $custoTotal,
-        ];
-
-        $lucroPercent = $this->calculateLucroPercent($order, $lucro);
         $nfeVinculada = $this->hasNfe($order);
 
         $jsonData = $order->json_data ?? [];
         $shipmentDetails = $jsonData['shipment_details'] ?? [];
 
-        // Get item_id from first item for product link
         $itemId = null;
         if (! empty($jsonData['order_items'])) {
             $firstItem = $jsonData['order_items'][0];
@@ -158,9 +184,9 @@ class OrderController extends Controller
             'taxa_pagamento' => floatval($order->valor_taxa_pagamento ?? 0),
             'valor_imposto' => round($valorImposto, 2),
             'aliquota_imposto' => $empresa ? floatval($empresa->aliquota_simples ?? 0) : 0,
-            'valor_liquido' => round($valorLiquido, 2),
-            'custo_total' => $lucro['custo'],
-            'lucro' => $lucro['valor'],
+            'valor_liquido' => $valorLiquido,
+            'custo_total' => $custoTotal,
+            'lucro' => $lucroValor,
             'lucro_percent' => $lucroPercent,
             'itens' => $itens,
             'nfe_vinculada' => $nfeVinculada,
@@ -177,113 +203,13 @@ class OrderController extends Controller
                 'label_pdf' => $shipmentDetails['label_pdf'] ?? null,
             ],
             'json_data' => $jsonData,
+            'order_json' => $order->order_json,
+            'cart_json' => $order->cart_json,
+            'payments_json' => $order->payments_json,
+            'shipments_json' => $order->shipments_json,
             'created_at' => $order->created_at,
             'updated_at' => $order->updated_at,
         ];
-    }
-
-
-    private function calculateLucroPercent($order, $lucro)
-    {
-        $valorLiquido = floatval($order->valor_liquido ?? 0);
-        if ($valorLiquido <= 0) {
-            return 0;
-        }
-
-        return round(($lucro['valor'] / $valorLiquido) * 100, 1);
-    }
-
-    private function getOrderItems($order, $skusInfo = null)
-    {
-        $jsonData = $order->json_data ?? [];
-        $orderItems = $jsonData['order_items'] ?? [];
-
-        $itens = [];
-
-        foreach ($orderItems as $item) {
-            $sku = $item['item']['seller_sku'] ?? null;
-            $itemId = $item['item']['id'] ?? null;
-            $titulo = $item['item']['title'] ?? 'Produto sem título';
-            $quantidade = $item['quantity'] ?? 1;
-            $precoUnitario = floatval($item['unit_price'] ?? 0);
-            $precoTotal = $precoUnitario * $quantidade;
-            $thumbnail = $item['item']['thumbnail'] ?? $item['item']['picture'] ?? null;
-
-            $custoUnitario = 0;
-            $isKit = false;
-            $kitComponents = [];
-            
-            $isLinked = false;
-            $anuncioId = null;
-            $produtoId = null;
-
-            if ($sku) {
-                $productSku = $skusInfo ? $skusInfo->where('sku', $sku)->first() : ProductSku::with('product')->where('sku', $sku)->first();
-                if ($productSku) {
-                    $isLinked = true;
-                    $produtoId = $productSku->product_id;
-                    if ($productSku->product && $productSku->product->tipo === 'composto') {
-                         $isKit = true;
-                         $components = \App\Models\ProductComponent::with('componentProduct')->where('product_id', $productSku->product->id)->get();
-                         foreach ($components as $comp) {
-                             $compSku = \App\Models\ProductSku::where('product_id', $comp->component_product_id)->first();
-                             $compCusto = $compSku ? floatval($compSku->preco_custo) : 0;
-                             $custoUnitario += $compCusto * $comp->quantity;
-                             $kitComponents[] = [
-                                 'nome' => $comp->componentProduct->nome ?? 'Componente',
-                                 'sku' => $compSku->sku ?? $comp->componentProduct->sku ?? '',
-                                 'quantidade' => $comp->quantity * $quantidade,
-                             ];
-                         }
-                    } else {
-                        $custoUnitario = floatval($productSku->preco_custo);
-                        if ($custoUnitario <= 0 && $productSku->product) {
-                            $custoUnitario = floatval($productSku->product->preco_custo);
-                        }
-                    }
-                }
-            }
-
-            // Fallback: If no SKU match, check if there's a mapped anuncio for this item_id
-            if (!$isLinked && $itemId) {
-                $anuncio = \App\Models\MarketplaceAnuncio::where('external_id', $itemId)->first();
-                if ($anuncio) {
-                    $anuncioId = $anuncio->id;
-                    if ($anuncio->product_sku_id) {
-                        $isLinked = true;
-                        $produtoId = \App\Models\ProductSku::find($anuncio->product_sku_id)->product_id ?? null;
-                        
-                        $fallbackP = \App\Models\ProductSku::with('product')->find($anuncio->product_sku_id);
-                        if ($fallbackP) {
-                            $custoUnitario = floatval($fallbackP->preco_custo);
-                            if ($custoUnitario <= 0 && $fallbackP->product) {
-                                $custoUnitario = floatval($fallbackP->product->preco_custo);
-                            }
-                        }
-                    }
-                }
-            }
-
-            $itens[] = [
-                'sku' => $sku,
-                'item_id' => $itemId,
-                'anuncio_id' => $anuncioId,
-                'produto_id' => $produtoId,
-                'is_linked' => $isLinked,
-                'titulo' => $titulo,
-                'titulo_reduzido' => mb_strimwidth($titulo, 0, 35, '...'),
-                'quantidade' => $quantidade,
-                'preco_unitario' => $precoUnitario,
-                'preco_total' => $precoTotal,
-                'custo_unitario' => $custoUnitario,
-                'custo_total' => $custoUnitario * $quantidade,
-                'thumbnail' => $thumbnail,
-                'is_kit' => $isKit,
-                'kit_components' => $kitComponents,
-            ];
-        }
-
-        return $itens;
     }
 
     private function hasNfe($order)
@@ -367,6 +293,70 @@ class OrderController extends Controller
         return response()->json(['success' => true, 'message' => 'Pedido atualizado']);
     }
 
+    public function recalculate(Request $request)
+    {
+        $empresaId = $request->get('empresa_id', session('empresa_id', 6));
+        if (! $empresaId) {
+            return response()->json(['error' => 'Empresa não definida'], 422);
+        }
+
+        $empresa = Empresa::find($empresaId);
+        if (! $empresa) {
+            return response()->json(['error' => 'Empresa não encontrada'], 404);
+        }
+
+        $query = MarketplacePedido::where('empresa_id', $empresaId);
+
+        if ($request->filled('id')) {
+            $query->where('id', $request->get('id'));
+        } elseif ($request->filled('order_id')) {
+            $query->where('pedido_id', $request->get('order_id'));
+        } else {
+            $fromStr = $request->get('from');
+            $toStr = $request->get('to');
+            
+            if (!$fromStr || !$toStr) {
+                return response()->json(['error' => 'Período não definido (de/até)'], 422);
+            }
+
+            $from = Carbon::parse($fromStr)->startOfDay();
+            $to = Carbon::parse($toStr)->endOfDay();
+
+            if ($from->diffInDays($to) > 31) {
+                return response()->json(['error' => 'O período máximo para recálculo é de 31 dias.'], 422);
+            }
+
+            $query->whereBetween('data_compra', [$from, $to]);
+        }
+
+        $orders = $query->get();
+        $count = 0;
+        $formattedOrders = [];
+        
+        // Cache service instances for efficiency
+        $meliService = new MeliIntegrationService($empresaId);
+
+        foreach ($orders as $order) {
+            if ($order->marketplace === 'mercadolivre') {
+                $meliService->recalculateOrderFinancials($order);
+            } else {
+                $this->profitService->persistFinancialFields($order, $empresa);
+            }
+            
+            $count++;
+            if ($orders->count() <= 5) {
+                $formattedOrders[] = $this->formatOrder($order, null, $empresa);
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => $count . ' pedido(s) recalculado(s) com sucesso usando dados locais.',
+            'recalculated' => $count,
+            'orders' => $formattedOrders,
+        ]);
+    }
+
     public function integrations(Request $request)
     {
         $empresaId = (int) $request->get('empresa_id', session('empresa_id', 6));
@@ -403,10 +393,34 @@ class OrderController extends Controller
                     ], 400);
                 }
 
-                $result = $service->syncOrders(
-                    $request->get('data_de'),
-                    $request->get('data_ate')
-                );
+                $from = $request->get('data_de');
+                $to = $request->get('data_ate');
+                $page = $request->get('page');
+                
+                if ($from && $to) {
+                    $fromDate = Carbon::parse($from);
+                    $toDate = Carbon::parse($to);
+                    if ($fromDate->diffInDays($toDate) > 31) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'O período máximo para sincronização é de 31 dias.',
+                        ], 422);
+                    }
+                }
+
+                $result = $service->syncOrders($from, $to, $page !== null ? (int)$page : null);
+
+                return response()->json($result);
+            }
+
+            if ($marketplace === 'amazon') {
+                $service = new AmazonSpApiService($empresaId);
+
+                $from = $request->get('data_de');
+                $to = $request->get('data_ate');
+                $nextToken = $request->get('next_token'); // Amazon usa NextToken em vez de Offset
+
+                $result = $service->syncOrders($from, $to, $nextToken);
 
                 return response()->json($result);
             }

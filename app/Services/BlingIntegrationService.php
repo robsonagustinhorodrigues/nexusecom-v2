@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Empresa;
 use App\Models\Integracao;
 use App\Models\MarketplacePedido;
 use App\Models\NfeEmitida;
@@ -22,12 +23,15 @@ class BlingIntegrationService
 
     private ?Integracao $integracao = null;
 
+    private OrderProfitService $profitService;
+
     public function __construct(int $empresaId)
     {
         $this->empresaId = $empresaId;
         $this->baseUrl = config('services.bling.api_url', env('BLING_API_URL', 'https://bling.com.br/Api/v6/'));
 
         $this->loadIntegracao();
+        $this->profitService = new OrderProfitService();
     }
 
     private function loadIntegracao(): void
@@ -786,7 +790,7 @@ class BlingIntegrationService
         $nome = $cliente['nome'] ?? '';
         $cpfCnpj = $cliente['documento'] ?? '';
 
-        MarketplacePedido::updateOrCreate(
+        $pedido = MarketplacePedido::updateOrCreate(
             [
                 'empresa_id' => $this->empresaId,
                 'external_id' => (string) $externalId,
@@ -803,6 +807,9 @@ class BlingIntegrationService
                 'json_data' => $pedido,
             ]
         );
+
+        $empresa = Empresa::find($this->empresaId);
+        $this->profitService->persistFinancialFields($pedido, $empresa);
     }
 
     public function salvarNotaFiscal(array $nota): void

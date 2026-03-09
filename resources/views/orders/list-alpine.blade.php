@@ -5,144 +5,248 @@
 
 @section('content')
 <div x-data="ordersPage()" x-init="init()">
-    <!-- Header com Filtros -->
-    <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4 mb-6">
-        <div>
-            <h2 class="text-2xl font-black text-white tracking-tight italic uppercase">Pedidos Marketplace</h2>
-            <p class="text-sm text-slate-400 italic underline decoration-indigo-500/50 decoration-2 underline-offset-4">Acompanhamento de vendas em tempo real</p>
-        </div>
-    </div>
+    <!-- Premium Dashboard Header -->
+    <div class="space-y-4 mb-6">
+        <!-- Top Row: Title & Global Actions -->
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+                <h1 class="text-3xl font-black text-white tracking-tighter uppercase italic flex items-center gap-3">
+                    <span class="bg-indigo-600 w-2 h-8 rounded-full"></span>
+                    Pedidos <span class="text-indigo-500">Vendas</span>
+                </h1>
+                <p class="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] ml-5">Marketplace Intelligence Dashboard</p>
+            </div>
 
-    <!-- Filters -->
-    <div class="bg-slate-800 rounded-xl border border-slate-700 p-4 mb-4">
-        <div class="flex flex-wrap gap-3 items-center">
-            <div class="flex-1 min-w-[180px]">
+            <div class="flex items-center gap-3">
+                <!-- Sync Progress Indicator -->
+                <div x-show="syncing" class="flex items-center gap-2 px-3 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-indigo-400 text-xs font-bold animate-pulse shadow-inner">
+                    <i class="fas fa-circle-notch fa-spin"></i>
+                    <span x-text="syncStatus"></span>
+                </div>
+
+                <!-- Sync Menu -->
                 <div class="relative">
-                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"></i>
-                    <input 
-                        type="text" 
-                        x-model="search"
-                        @input.debounce.300ms="loadOrders()"
-                        placeholder="Buscar pedido, cliente, SKU..."
-                        class="w-full bg-slate-900 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-                    >
-                </div>
-            </div>
-            
-            <!-- Data De -->
-            <div class="relative">
-                <i class="fas fa-calendar absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
-                <input 
-                    type="date" 
-                    x-model="dataDe"
-                    @change="loadOrders()"
-                    class="bg-slate-900 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-                    title="Data de"
-                >
-            </div>
-            
-            <span class="text-slate-500">até</span>
-            
-            <!-- Data Ate -->
-            <div class="relative">
-                <i class="fas fa-calendar absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
-                <input 
-                    type="date" 
-                    x-model="dataAte"
-                    @change="loadOrders()"
-                    class="bg-slate-900 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-                    title="Data até"
-                >
-            </div>
-            
-            <select x-model="status" @change="loadOrders()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm">
-                <option value="">Status</option>
-                <option value="paid">Pago</option>
-                <option value="pending">Pendente</option>
-                <option value="shipped">Enviado</option>
-                <option value="delivered">Entregue</option>
-                <option value="canceled">Cancelado</option>
-            </select>
-            
-            <select x-model="statusEnvio" @change="loadOrders()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm">
-                <option value="">Envio</option>
-                <option value="pending">Aguardando</option>
-                <option value="shipped">Enviado</option>
-                <option value="delivered">Entregue</option>
-                <option value="not_delivered">Não entregue</option>
-            </select>
-            
-            <select x-model="logistics" @change="loadOrders()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm">
-                <option value="">Logística</option>
-                <option value="me2">Mercado Envios</option>
-                <option value="fulfillment">Fulfillment</option>
-                <option value="classic">Classic</option>
-            </select>
-            
-            <select x-model="marketplace" @change="loadOrders()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm">
-                <option value="">Marketplace</option>
-                <option value="mercadolivre">Mercado Livre</option>
-                <option value="amazon">Amazon</option>
-                <option value="bling">Bling</option>
-            </select>
-            
-            <!-- Dropdown Sincronizar -->
-            <div class="relative ml-auto">
-                <button @click="syncDropdownOpen = !syncDropdownOpen" class="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg flex items-center gap-2 text-sm text-slate-300">
-                    <i class="fas fa-sync"></i>
-                    <i class="fas fa-chevron-down text-xs"></i>
-                </button>
-                
-                <div x-show="syncDropdownOpen" @click.away="syncDropdownOpen = false" class="absolute right-0 mt-2 w-64 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden">
-                    <div x-show="!hasMeliIntegration" class="px-4 py-3 text-sm text-slate-400">
-                        <i class="fas fa-info-circle mr-2"></i>
-                        Nenhuma integração com Mercado Livre
-                    </div>
-                    <button x-show="hasMeliIntegration" @click="syncOrders('mercadolivre'); syncDropdownOpen = false" :disabled="syncing" 
-                        class="w-full px-4 py-3 text-left text-sm text-slate-200 hover:bg-slate-700 flex items-center gap-3 disabled:opacity-50">
-                        <i class="fab fa-mercadolivre text-yellow-400 text-lg"></i>
-                        <span x-text="syncing ? 'Sincronizando...' : 'Sincronizar Mercado Livre (Recentes)'"></span>
+                    <button @click="syncDropdownOpen = !syncDropdownOpen" :disabled="syncing" 
+                        class="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl flex items-center gap-3 text-sm text-white font-bold transition-all shadow-lg active:scale-95 disabled:opacity-50">
+                        <i class="fas fa-sync" :class="syncing ? 'fa-spin' : ''"></i>
+                        <span>Sincronizar</span>
+                        <i class="fas fa-chevron-down text-[10px] text-slate-500"></i>
                     </button>
-                    <button x-show="hasMeliIntegration" @click="syncOrders('mercadolivre', true); syncDropdownOpen = false" :disabled="syncing" 
-                        class="w-full px-4 py-3 text-left text-sm text-slate-200 hover:bg-slate-700 flex items-center gap-3 border-t border-slate-700 disabled:opacity-50">
-                        <i class="fas fa-calendar-alt text-indigo-400 text-lg"></i>
-                        <span x-text="syncing ? 'Sincronizando...' : 'Sincronizar por Período'"></span>
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
+                    
+                    <div x-show="syncDropdownOpen" @click.away="syncDropdownOpen = false" 
+                        x-transition:enter="transition ease-out duration-100"
+                        x-transition:enter-start="opacity-0 scale-95"
+                        x-transition:enter-end="opacity-100 scale-100"
+                        class="absolute right-0 mt-2 w-72 bg-black border border-slate-700/50 backdrop-blur-xl rounded-2xl shadow-2xl z-50 overflow-hidden py-1">
+                        
+                        <div x-show="!hasMeliIntegration && !hasAmazonIntegration" class="px-4 py-3 text-xs text-slate-500 flex items-center gap-2 italic">
+                            <i class="fas fa-exclamation-triangle"></i> Sem integração ativa
+                        </div>
 
-    <!-- Stats e Ações em Lote -->
-    <div class="flex flex-wrap items-center gap-4 mb-4">
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 flex-1">
-            <div class="bg-slate-800 rounded-lg border border-slate-700 p-3">
-                <p class="text-xs text-slate-400">Pedidos</p>
-                <p class="text-xl font-bold" x-text="orders.length"></p>
-            </div>
-            <div class="bg-slate-800 rounded-lg border border-slate-700 p-3">
-                <p class="text-xs text-slate-400">Faturamento</p>
-                <p class="text-xl font-bold text-emerald-400" x-text="formatMoney(totalValue)"></p>
-            </div>
-            <div class="bg-slate-800 rounded-lg border border-slate-700 p-3">
-                <p class="text-xs text-slate-400">Lucro</p>
-                <p class="text-xl font-bold" :class="totalProfit >= 0 ? 'text-green-400' : 'text-red-400'" x-text="formatMoney(totalProfit)"></p>
-            </div>
-            <div class="bg-slate-800 rounded-lg border border-slate-700 p-3">
-                <p class="text-xs text-slate-400">Frete Médio</p>
-                <p class="text-xl font-bold text-amber-400" x-text="formatMoney(avgFrete)"></p>
+                        <div x-show="hasMeliIntegration" class="contents">
+                            <button @click="syncOrders('mercadolivre'); syncDropdownOpen = false" 
+                                class="w-full px-4 py-3 text-left text-sm text-slate-300 hover:bg-white/5 hover:text-white flex items-center gap-3 transition-colors">
+                                <div class="w-8 h-8 rounded-lg bg-yellow-500/10 flex items-center justify-center">
+                                    <i class="fab fa-mercadolivre text-yellow-400"></i>
+                                </div>
+                                <div class="flex flex-col">
+                                    <span class="font-bold">Mercado Livre</span>
+                                    <span class="text-[10px] text-slate-500">Sincronizar pedidos recentes</span>
+                                </div>
+                            </button>
+                            
+                            <button @click="syncOrders('mercadolivre', true); syncDropdownOpen = false" 
+                                class="w-full px-4 py-3 text-left text-sm text-slate-300 hover:bg-white/5 hover:text-white flex items-center gap-3 transition-colors border-t border-white/5">
+                                <div class="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center">
+                                    <i class="fas fa-calendar-alt text-indigo-400"></i>
+                                </div>
+                                <div class="flex flex-col">
+                                    <span class="font-bold">Por Período (Meli)</span>
+                                    <span class="text-[10px] text-slate-500">Data personalizada (Max 31d)</span>
+                                </div>
+                            </button>
+                        </div>
+
+                        <div x-show="hasAmazonIntegration" class="contents">
+                            <button @click="syncOrders('amazon'); syncDropdownOpen = false" 
+                                class="w-full px-4 py-3 text-left text-sm text-slate-300 hover:bg-white/5 hover:text-white flex items-center gap-3 transition-colors border-t border-white/5">
+                                <div class="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center">
+                                    <i class="fab fa-amazon text-orange-400"></i>
+                                </div>
+                                <div class="flex flex-col">
+                                    <span class="font-bold">Amazon</span>
+                                    <span class="text-[10px] text-slate-500">Sincronizar pedidos recentes</span>
+                                </div>
+                            </button>
+
+                            <button @click="syncOrders('amazon', true); syncDropdownOpen = false" 
+                                class="w-full px-4 py-3 text-left text-sm text-slate-300 hover:bg-white/5 hover:text-white flex items-center gap-3 transition-colors border-t border-white/5">
+                                <div class="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center">
+                                    <i class="fas fa-calendar-alt text-indigo-400"></i>
+                                </div>
+                                <div class="flex flex-col">
+                                    <span class="font-bold">Por Período (Amazon)</span>
+                                    <span class="text-[10px] text-slate-500">Data personalizada (Max 31d)</span>
+                                </div>
+                            </button>
+                        </div>
+
+                        <div x-show="hasMeliIntegration || hasAmazonIntegration" class="contents">
+                            <button @click="recalculatePeriod(); syncDropdownOpen = false" 
+                                class="w-full px-4 py-3 text-left text-sm text-slate-300 hover:bg-white/5 hover:text-white flex items-center gap-3 transition-colors border-t border-white/5">
+                                <div class="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                                    <i class="fas fa-calculator text-amber-400"></i>
+                                </div>
+                                <div class="flex flex-col">
+                                    <span class="font-bold">Recalcular Período</span>
+                                    <span class="text-[10px] text-slate-500">Atualizar lucros locais</span>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
-        
-        <!-- Batch Actions -->
-        <div x-show="selectedOrders.length > 0" class="flex items-center gap-2 bg-indigo-900/50 border border-indigo-700 rounded-lg px-3 py-2">
-            <span class="text-sm text-indigo-300" x-text="selectedOrders.length + ' selecionado(s)'"></span>
-            <button @click="printSelectedLabels()" class="text-xs px-2 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded flex items-center gap-1">
-                <i class="fas fa-print"></i> Etiquetas
-            </button>
-            <button @click="selectedOrders = []" class="text-slate-400 hover:text-white p-1">
-                <i class="fas fa-times"></i>
-            </button>
+
+        <!-- Stats Bar -->
+        <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            <!-- Total Pedidos -->
+            <div class="bg-gradient-to-br from-indigo-600/20 to-transparent border border-indigo-500/20 rounded-2xl p-4 shadow-xl backdrop-blur-sm group">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Pedidos</span>
+                    <i class="fas fa-shopping-bag text-indigo-500 group-hover:scale-110 transition-transform"></i>
+                </div>
+                <div class="text-2xl font-black text-white" x-text="globalStats.total_pedidos"></div>
+                <div class="mt-1 h-1 w-12 bg-indigo-500/50 rounded-full"></div>
+            </div>
+
+            <!-- Faturamento -->
+            <div class="bg-gradient-to-br from-emerald-600/20 to-transparent border border-emerald-500/20 rounded-2xl p-4 shadow-xl backdrop-blur-sm group">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Faturamento</span>
+                    <i class="fas fa-dollar-sign text-emerald-500 group-hover:scale-110 transition-transform"></i>
+                </div>
+                <div class="text-2xl font-black text-white" x-text="formatMoney(totalValue)"></div>
+                <div class="mt-1 h-1 w-12 bg-emerald-500/50 rounded-full"></div>
+            </div>
+
+            <!-- Lucro -->
+            <div class="bg-gradient-to-br from-slate-800 to-transparent border border-slate-700/50 rounded-2xl p-4 shadow-xl backdrop-blur-sm group">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-[10px] font-black uppercase tracking-widest" :class="totalProfit >= 0 ? 'text-green-400' : 'text-red-400'">Lucro</span>
+                    <i class="fas fa-chart-line text-slate-500 group-hover:scale-110 transition-transform"></i>
+                </div>
+                <div class="text-2xl font-black text-white" x-text="formatMoney(totalProfit)"></div>
+                <div class="mt-1 h-1 w-12 rounded-full" :class="totalProfit >= 0 ? 'bg-green-500/50' : 'bg-red-500/50'"></div>
+            </div>
+
+            <!-- Selecionados Contextual -->
+            <div class="col-span-2 lg:col-span-2 grid grid-cols-2 gap-3">
+                <div class="bg-slate-900/60 border border-indigo-500/30 rounded-2xl p-4 shadow-xl border-dashed">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-[10px] font-black text-indigo-300 uppercase tracking-widest">Selecionados</span>
+                        <i class="fas fa-check-double text-indigo-400"></i>
+                    </div>
+                    <div class="text-2xl font-black text-white" x-text="selectedCount"></div>
+                </div>
+                <div class="bg-slate-900/60 border border-indigo-500/30 rounded-2xl p-4 shadow-xl border-dashed">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-[10px] font-black text-indigo-300 uppercase tracking-widest">Valor Seleção</span>
+                        <i class="fas fa-calculator text-indigo-400"></i>
+                    </div>
+                    <div class="text-2xl font-black text-indigo-400" x-text="formatMoney(selectedValue)"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filters & Control Bar -->
+        <div class="relative">
+            <div class="bg-slate-800/80 backdrop-blur-md border border-slate-700/50 rounded-2xl p-3 shadow-2xl flex flex-wrap items-center gap-3 transition-all">
+                
+                <!-- Search -->
+                <div class="flex-1 min-w-[200px] relative group">
+                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-indigo-500 transition-colors"></i>
+                    <input type="text" x-model="search" @input.debounce.300ms="loadOrders()" 
+                        placeholder="Pesquisar venda, cliente ou produto..."
+                        class="w-full bg-slate-900/50 border border-slate-700/50 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 focus:outline-none transition-all">
+                </div>
+
+                <!-- Date Range -->
+                <div class="flex items-center bg-slate-900/50 border border-slate-700/50 rounded-xl px-2 gap-2">
+                    <input type="date" x-model="dataDe" @change="loadOrders()" class="bg-transparent border-none py-2 text-xs text-slate-300 focus:ring-0 outline-none">
+                    <span class="text-slate-600 font-bold text-[10px]">ATÉ</span>
+                    <input type="date" x-model="dataAte" @change="loadOrders()" class="bg-transparent border-none py-2 text-xs text-slate-300 focus:ring-0 outline-none">
+                </div>
+
+                <!-- Category Filters (Scrollable on small screens) -->
+                <div class="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 md:pb-0">
+                    <select x-model="status" @change="loadOrders()" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-300 focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none cursor-pointer">
+                        <option value="" class="bg-black">Status Pedido</option>
+                        <option value="paid" class="bg-black">✅ Pago</option>
+                        <option value="pending" class="bg-black">⏳ Pendente</option>
+                        <option value="shipped" class="bg-black">🚚 Enviado</option>
+                        <option value="delivered" class="bg-black">🏁 Entregue</option>
+                        <option value="canceled" class="bg-black">❌ Cancelado</option>
+                    </select>
+
+                    <select x-model="statusEnvio" @change="loadOrders()" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-400 focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none cursor-pointer">
+                        <option value="" class="bg-black">Status Envio</option>
+                        <option value="pending" class="bg-black">🟡 Aguardando</option>
+                        <option value="shipped" class="bg-black">🔵 Enviado</option>
+                        <option value="delivered" class="bg-black">🟢 Entregue</option>
+                    </select>
+
+                    <select x-model="logistics" @change="loadOrders()" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-400 focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none cursor-pointer">
+                        <option value="" class="bg-black">Logística</option>
+                        <option value="me2" class="bg-black">Mercado Envios</option>
+                        <option value="fulfillment" class="bg-black">🚀 Full</option>
+                        <option value="classic" class="bg-black">🚚 Classic</option>
+                    </select>
+
+                    <select x-model="marketplace" @change="loadOrders()" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-400 focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none cursor-pointer">
+                        <option value="" class="bg-black">Marketplace</option>
+                        <option value="mercadolivre" class="bg-black">🤝 Meli</option>
+                        <option value="amazon" class="bg-black">📦 Amazon</option>
+                        <option value="bling" class="bg-black">💹 Bling</option>
+                    </select>
+                </div>
+
+                <!-- Sort -->
+                <div class="flex items-center bg-black border border-slate-700/50 rounded-xl px-3 h-[42px] gap-2">
+                    <i class="fas fa-sort text-slate-500 text-xs"></i>
+                    <select x-model="sortBy" @change="loadOrders()" class="bg-transparent border-none py-0 text-xs text-white font-bold focus:ring-0 outline-none cursor-pointer">
+                        <option value="data_compra" class="bg-black border-none">📅 Data</option>
+                        <option value="valor_total" class="bg-black border-none">💰 Valor</option>
+                        <option value="lucro" class="bg-black border-none">📈 Lucro</option>
+                        <option value="lucro_percent" class="bg-black border-none">📊 Lucro %</option>
+                    </select>
+                    <button @click="sortDir = (sortDir === 'asc' ? 'desc' : 'asc'); loadOrders()" class="text-indigo-400 hover:text-indigo-300 transition-colors">
+                        <i class="fas" :class="sortDir === 'asc' ? 'fa-sort-up' : 'fa-sort-down'"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Selection Overlay (Active when orders are selected) -->
+            <template x-if="selectedCount > 0">
+                <div x-transition:enter="transition ease-out duration-200"
+                    x-transition:enter-start="opacity-0 translate-y-4"
+                    x-transition:enter-end="opacity-100 translate-y-0"
+                    class="absolute inset-0 bg-indigo-600 rounded-2xl flex items-center justify-between px-6 shadow-2xl z-10 border border-indigo-400/50">
+                    <div class="flex items-center gap-4">
+                        <i class="fas fa-check-circle text-2xl text-white"></i>
+                        <span class="text-white font-black text-lg" x-text="selectedCount + ' Pedidos Selecionados'"></span>
+                        <span class="bg-white/20 px-3 py-1 rounded-full text-xs text-white font-bold" x-text="formatMoney(selectedValue)"></span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button @click="printSelectedLabels()" class="px-5 py-2.5 bg-white text-indigo-600 rounded-xl font-black text-sm hover:bg-slate-100 transition-all flex items-center gap-2 shadow-lg active:scale-95">
+                            <i class="fas fa-print"></i> Imprimir Etiquetas
+                        </button>
+                        <button @click="selectedOrders = []" class="p-2.5 bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl transition-all">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+            </template>
         </div>
     </div>
 
@@ -412,6 +516,9 @@
                                 <button @click="refreshOrder(order.id); actionsMenuOpen = null" class="w-full text-left px-4 py-2 text-slate-200 hover:bg-slate-700 hover:text-white transition-colors flex items-center gap-2 cursor-pointer">
                                     <i class="fas fa-sync w-4 text-blue-400"></i> Sincronizar Novos Dados
                                 </button>
+                                <button @click="recalculateOrder(order.id); actionsMenuOpen = null" class="w-full text-left px-4 py-2 text-slate-200 hover:bg-slate-700 hover:text-white transition-colors flex items-center gap-2 cursor-pointer">
+                                    <i class="fas fa-calculator w-4 text-amber-400"></i> Recalcular Lucro (Local)
+                                </button>
                                 <button @click="viewJson(order); actionsMenuOpen = null" class="w-full text-left px-4 py-2 text-slate-200 hover:bg-slate-700 hover:text-white transition-colors flex items-center gap-2 mb-1 cursor-pointer">
                                     <i class="fas fa-code w-4 text-slate-500"></i> Ver JSON Técnico
                                 </button>
@@ -463,13 +570,42 @@
                     <i class="fas fa-times text-xl"></i>
                 </button>
             </div>
-            <div class="flex-1 overflow-auto p-4">
-                <div class="space-y-4">
+            <div class="flex-1 overflow-auto p-4 space-y-6">
+                <template x-if="currentJsons?.order">
                     <div>
-                        <h4 class="text-indigo-400 font-bold mb-1 uppercase text-[10px] tracking-widest">Dados do Pedido (Order)</h4>
-                        <pre class="bg-slate-900/50 p-3 rounded border border-slate-700 text-xs text-green-400 font-mono whitespace-pre-wrap" x-text="JSON.stringify(currentJson, null, 2)"></pre>
+                        <h4 class="text-indigo-400 font-bold mb-2 uppercase text-[10px] tracking-widest flex items-center gap-2">
+                            <i class="fas fa-shopping-bag"></i> API orders/{order_id}
+                        </h4>
+                        <pre class="bg-slate-900/50 p-3 rounded border border-slate-700 text-xs text-green-400 font-mono whitespace-pre-wrap max-h-96 overflow-auto" x-text="JSON.stringify(currentJsons.order, null, 2)"></pre>
                     </div>
-                </div>
+                </template>
+
+                <template x-if="currentJsons?.cart">
+                    <div>
+                        <h4 class="text-fuchsia-400 font-bold mb-2 uppercase text-[10px] tracking-widest flex items-center gap-2">
+                            <i class="fas fa-shopping-cart"></i> API carts/{cart_id}
+                        </h4>
+                        <pre class="bg-slate-900/50 p-3 rounded border border-slate-700 text-xs text-green-400 font-mono whitespace-pre-wrap max-h-96 overflow-auto" x-text="JSON.stringify(currentJsons.cart, null, 2)"></pre>
+                    </div>
+                </template>
+
+                <template x-if="currentJsons?.payments">
+                    <div>
+                        <h4 class="text-emerald-400 font-bold mb-2 uppercase text-[10px] tracking-widest flex items-center gap-2">
+                            <i class="fas fa-credit-card"></i> API orders/{order_id}/payments
+                        </h4>
+                        <pre class="bg-slate-900/50 p-3 rounded border border-slate-700 text-xs text-green-400 font-mono whitespace-pre-wrap max-h-96 overflow-auto" x-text="JSON.stringify(currentJsons.payments, null, 2)"></pre>
+                    </div>
+                </template>
+
+                <template x-if="currentJsons?.shipments">
+                    <div>
+                        <h4 class="text-blue-400 font-bold mb-2 uppercase text-[10px] tracking-widest flex items-center gap-2">
+                            <i class="fas fa-truck"></i> API shipments/{shipment_id}
+                        </h4>
+                        <pre class="bg-slate-900/50 p-3 rounded border border-slate-700 text-xs text-green-400 font-mono whitespace-pre-wrap max-h-96 overflow-auto" x-text="JSON.stringify(currentJsons.shipments, null, 2)"></pre>
+                    </div>
+                </template>
             </div>
         </div>
     </div>
@@ -491,7 +627,7 @@
                 <div class="mb-5 bg-indigo-500/10 border border-indigo-400/20 rounded-lg p-3">
                     <div class="text-[10px] uppercase font-bold text-indigo-400 mb-1">Item do Pedido</div>
                     <div class="text-sm font-semibold text-slate-200 line-clamp-2" x-text="linkingItem?.titulo"></div>
-                    <div class="text-[11px] text-slate-400 mt-1 font-mono" x-show="linkingItem?.item_id">ID: <span x-text="linkingItem.item_id"></span></div>
+                    <div class="text-[11px] text-slate-400 mt-1 font-mono" x-show="linkingItem?.item_id">ID: <span x-text="linkingItem?.item_id"></span></div>
                 </div>
 
                 <div class="relative">
@@ -568,6 +704,7 @@ function ordersPage() {
         orders: [],
         loading: false,
         syncing: false,
+        syncStatus: '',
         search: '',
         status: '',
         statusEnvio: '',
@@ -575,10 +712,13 @@ function ordersPage() {
         marketplace: '',
         dataDe: '',
         dataAte: '',
+        sortBy: 'data_compra',
+        sortDir: 'desc',
         hasMeliIntegration: false,
+        hasAmazonIntegration: false,
         syncDropdownOpen: false,
         showJsonModal: false,
-        currentJson: null,
+        currentJsons: { order: null, cart: null, payments: null, shipments: null },
         selectedOrders: [],
         actionsMenuOpen: null,
         currentPage: 1,
@@ -586,6 +726,11 @@ function ordersPage() {
         total: 0,
         from: 0,
         to: 0,
+        globalStats: {
+            total_pedidos: 0,
+            total_faturamento: 0,
+            total_lucro: 0
+        },
 
         showLinkModal: false,
         linkingOrder: null,
@@ -623,6 +768,11 @@ function ordersPage() {
             this.initFromUrl();
             this.loadOrders(false);
             this.loadIntegrations();
+
+            window.addEventListener('popstate', () => {
+                this.initFromUrl();
+                this.loadOrders(false);
+            });
         },
 
         initFromUrl() {
@@ -634,6 +784,8 @@ function ordersPage() {
             if (urlParams.has('marketplace')) this.marketplace = urlParams.get('marketplace');
             if (urlParams.has('data_de')) this.dataDe = urlParams.get('data_de');
             if (urlParams.has('data_ate')) this.dataAte = urlParams.get('data_ate');
+            if (urlParams.has('sort_by')) this.sortBy = urlParams.get('sort_by');
+            if (urlParams.has('sort_dir')) this.sortDir = urlParams.get('sort_dir');
             if (urlParams.has('page')) this.currentPage = parseInt(urlParams.get('page'));
         },
 
@@ -646,10 +798,17 @@ function ordersPage() {
             if (this.marketplace) params.set('marketplace', this.marketplace);
             if (this.dataDe) params.set('data_de', this.dataDe);
             if (this.dataAte) params.set('data_ate', this.dataAte);
+            if (this.sortBy) params.set('sort_by', this.sortBy);
+            if (this.sortDir) params.set('sort_dir', this.sortDir);
             if (this.currentPage > 1) params.set('page', this.currentPage);
 
-            const newRelativePathQuery = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
-            history.replaceState(null, '', newRelativePathQuery);
+            const queryString = params.toString();
+            const currentQuery = window.location.search.replace(/^\?/, '');
+            
+            if (queryString !== currentQuery) {
+                const newUrl = window.location.pathname + (queryString ? '?' + queryString : '');
+                history.pushState(null, '', newUrl);
+            }
         },
         
         async loadIntegrations() {
@@ -657,8 +816,10 @@ function ordersPage() {
                 const response = await fetch(`/api/orders/integrations?empresa_id=${this.empresaId}`);
                 const data = await response.json();
                 this.hasMeliIntegration = data.mercadolivre && data.mercadolivre.length > 0;
+                this.hasAmazonIntegration = data.amazon && data.amazon.length > 0;
             } catch (e) {
                 this.hasMeliIntegration = false;
+                this.hasAmazonIntegration = false;
             }
         },
         
@@ -677,6 +838,8 @@ function ordersPage() {
                     search: this.search,
                     data_de: this.dataDe,
                     data_ate: this.dataAte,
+                    sort_by: this.sortBy,
+                    sort_dir: this.sortDir,
                     page: this.currentPage,
                 });
                 
@@ -688,6 +851,9 @@ function ordersPage() {
                 this.total = result.total || 0;
                 this.from = result.from || 0;
                 this.to = result.to || 0;
+                if (result.stats) {
+                    this.globalStats = result.stats;
+                }
 
                 this.updateUrlParams();
                 this.selectedOrders = [];
@@ -701,7 +867,7 @@ function ordersPage() {
         changePage(page) {
             if (page >= 1 && page <= this.lastPage) {
                 this.currentPage = page;
-                this.loadOrders();
+                this.loadOrders(false);
             }
         },
         
@@ -711,31 +877,72 @@ function ordersPage() {
         
         async syncOrders(marketplace = 'mercadolivre', usePeriod = false) {
             this.syncing = true;
+            this.syncStatus = 'Iniciando...';
+            let totalImported = 0;
+            let page = 0;
+            let hasMore = true;
+
             try {
-                let url = `/api/orders/sync?empresa_id=${this.empresaId}&marketplace=${marketplace}`;
-                
                 if (usePeriod) {
-                    url += `&data_de=${this.dataDe}&data_ate=${this.dataAte}`;
+                    if (!this.dataDe || !this.dataAte) {
+                        alert('Selecione um período');
+                        this.syncing = false;
+                        return;
+                    }
+
+                    const start = new Date(this.dataDe);
+                    const end = new Date(this.dataAte);
+                    const diffDays = Math.ceil(Math.abs(end - start) / (1000 * 60 * 60 * 24));
+                    if (diffDays > 31) {
+                        alert('O período máximo para sincronização é de 31 dias.');
+                        this.syncing = false;
+                        return;
+                    }
                 }
 
-                const response = await fetch(url, { 
-                    method: 'POST',
-                    headers: {
-                        'X-CSRF-TOKEN': this.getCsrfToken(),
-                        'Content-Type': 'application/json',
+                while (hasMore) {
+                    this.syncStatus = `Pag. ${page + 1}...`;
+                    let url = `/api/orders/sync?empresa_id=${this.empresaId}&marketplace=${marketplace}&page=${page}`;
+                    
+                    if (usePeriod) {
+                        url += `&data_de=${this.dataDe}&data_ate=${this.dataAte}`;
                     }
-                });
-                const data = await response.json();
-                if (data.success) {
-                    alert(data.message);
-                } else {
-                    alert('Erro: ' + data.message);
+
+                    const response = await fetch(url, { 
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': this.getCsrfToken(),
+                            'Content-Type': 'application/json',
+                        }
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.message || 'Erro na requisição');
+                    }
+
+                    const data = await response.json();
+                    if (!data.success) {
+                        throw new Error(data.message);
+                    }
+
+                    totalImported += (data.imported || 0);
+                    hasMore = data.has_more;
+                    page = data.next_page;
+
+                    // Pequena pausa para não atropelar o servidor
+                    if (hasMore) await new Promise(r => setTimeout(r, 500));
                 }
+
+                alert(`${totalImported} pedidos sincronizados com sucesso.`);
                 await this.loadOrders();
             } catch (e) {
                 console.error('Sync error:', e);
+                alert('Erro durante a sincronização: ' + e.message);
+            } finally {
+                this.syncing = false;
+                this.syncStatus = '';
             }
-            this.syncing = false;
         },
         
         async refreshOrder(orderId) {
@@ -757,6 +964,83 @@ function ordersPage() {
             } catch (e) {
                 alert('Erro ao atualizar pedido');
             }
+        },
+
+        async recalculateOrder(orderId) {
+            try {
+                const response = await fetch(`/api/orders/recalculate`, { 
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': this.getCsrfToken(),
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        id: orderId,
+                        empresa_id: this.empresaId
+                    })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    // Update the order in the local list
+                    if (data.orders && data.orders.length > 0) {
+                        const updatedOrder = data.orders[0];
+                        const index = this.orders.findIndex(o => o.id === orderId);
+                        if (index !== -1) {
+                            this.orders[index] = updatedOrder;
+                        }
+                    }
+                    alert(data.message);
+                } else {
+                    alert('Erro: ' + data.message);
+                }
+            } catch (e) {
+                alert('Erro ao recalcular pedido');
+            }
+        },
+
+        async recalculatePeriod() {
+            if (!this.dataDe || !this.dataAte) {
+                alert('Selecione um período');
+                return;
+            }
+
+            const start = new Date(this.dataDe);
+            const end = new Date(this.dataAte);
+            const diffDays = Math.ceil(Math.abs(end - start) / (1000 * 60 * 60 * 24));
+            if (diffDays > 31) {
+                alert('O período máximo para recálculo é de 31 dias.');
+                return;
+            }
+
+            if (!confirm(`Deseja recalcular todos os pedidos entre ${this.dataDe} e ${this.dataAte}? (Isso usará apenas os dados locais já baixados)`)) {
+                return;
+            }
+
+            this.loading = true;
+            try {
+                const response = await fetch(`/api/orders/recalculate`, { 
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': this.getCsrfToken(),
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        from: this.dataDe,
+                        to: this.dataAte,
+                        empresa_id: this.empresaId
+                    })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    alert(data.message);
+                    await this.loadOrders();
+                } else {
+                    alert('Erro: ' + (data.error || data.message));
+                }
+            } catch (e) {
+                alert('Erro ao recalcular período');
+            }
+            this.loading = false;
         },
         
         toggleOrder(orderId) {
@@ -825,6 +1109,11 @@ function ordersPage() {
                             nfe_vinculada: order.nfe_vinculada,
                             logistics: order.logistics,
                             url_rastreamento: order.url_rastreamento,
+                            json_data: order.json_data,
+                            order_json: order.order_json,
+                            cart_json: order.cart_json,
+                            payments_json: order.payments_json,
+                            shipments_json: order.shipments_json,
                             // Sums
                             valor_total: 0,
                             valor_frete: 0,
@@ -874,18 +1163,26 @@ function ordersPage() {
             return groups;
         },
         
-        get totalValue() {
-            return this.orders.reduce((sum, o) => sum + (o.valor_total || 0), 0);
-        },
-        
         get totalProfit() {
-            return this.orders.reduce((sum, o) => sum + (o.lucro || 0), 0);
+            return this.globalStats.total_lucro || 0;
         },
-        
-        get avgFrete() {
-            if (!this.orders.length) return 0;
-            const total = this.orders.reduce((sum, o) => sum + (o.valor_frete || 0), 0);
-            return total / this.orders.length;
+
+        get totalValue() {
+            return this.globalStats.total_faturamento || 0;
+        },
+
+        get selectedCount() {
+            return this.selectedOrders.length;
+        },
+
+        get selectedValue() {
+            // This is complex because we only have data for the current page of orders
+            // but the user might select orders across pages. 
+            // However, typical behavior is selecting what's visible.
+            // For now, calculate from visible orders that are selected.
+            return this.orders
+                .filter(o => this.selectedOrders.includes(o.id))
+                .reduce((sum, o) => sum + (o.valor_total || 0), 0);
         },
         
         get visiblePages() {
@@ -961,13 +1258,18 @@ function ordersPage() {
         },
         
         viewJson(order) {
-            this.currentJson = order.json_data || {};
+            this.currentJsons = {
+                order: order.order_json || order.json_data || {},
+                cart: order.cart_json || null,
+                payments: order.payments_json || null,
+                shipments: order.shipments_json || null
+            };
             this.showJsonModal = true;
         },
         
         closeJsonModal() {
             this.showJsonModal = false;
-            this.currentJson = null;
+            this.currentJsons = { order: null, cart: null, payments: null, shipments: null };
         },
 
         openLinkModal(order, item) {

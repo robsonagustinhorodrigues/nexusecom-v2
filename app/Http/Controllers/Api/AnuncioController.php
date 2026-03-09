@@ -321,6 +321,15 @@ class AnuncioController extends Controller
 
     public function sync(Request $request)
     {
+        $empresaId = $request->get('empresa', $request->get('empresa_id', session('empresa_id', 6)));
+        $marketplace = $request->get('marketplace', 'mercadolivre');
+
+        if ($marketplace === 'amazon') {
+            $service = new \App\Services\AmazonSpApiService($empresaId);
+            $result = $service->syncListings();
+            return response()->json($result);
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Sincronização iniciada',

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Cliente;
+use App\Models\Empresa;
 use App\Models\Integracao;
 use App\Models\MarketplacePedido;
 use Illuminate\Support\Facades\Http;
@@ -14,9 +15,12 @@ class MeliIntegrationService
 
     protected ?Integracao $integracao = null;
 
+    protected OrderProfitService $profitService;
+
     public function __construct(?int $empresaId = null)
     {
         $this->empresaId = $empresaId;
+        $this->profitService = new OrderProfitService();
     }
 
     public function getIntegracao(): ?Integracao
@@ -57,6 +61,87 @@ class MeliIntegrationService
 
             return false;
         }
+    }
+
+    /**
+     * Extrai os campos financeiros do JSON do pedido.
+     */
+    public function extractFinancials(array $orderData): array
+    {
+        $valorTotal = floatval($orderData['total_amount'] ?? 0);
+
+        $valorFrete = 0;
+        if (isset($orderData['shipping_costs_details']['sender_cost'])) {
+            $valorFrete = floatval($orderData['shipping_costs_details']['sender_cost']);
+        } elseif (! empty($orderData['shipping_cost'])) {
+            $valorFrete = floatval($orderData['shipping_cost']);
+        }
+
+        $valorProdutos = 0;
+        if (! empty($orderData['order_items'])) {
+            foreach ($orderData['order_items'] as $item) {
+                $valorProdutos += floatval($item['unit_price'] ?? 0) * intval($item['quantity'] ?? 1);
+            }
+        }
+
+        $valorDesconto = floatval($orderData['discounts'] ?? 0);
+
+        $taxaPlatform = 0;
+        if (! empty($orderData['order_items'])) {
+            foreach ($orderData['order_items'] as $item) {
+                if (isset($item['sale_fee'])) {
+                    // FIX: Multiplicar pela quantidade para pedidos com multi-itens
+                    $taxaPlatform += floatval($item['sale_fee']) * intval($item['quantity'] ?? 1);
+                }
+            }
+        }
+
+        if ($taxaPlatform == 0 && $valorTotal > 0) {
+            $taxaPlatform = $valorTotal * 0.12;
+        }
+
+        $taxaPagamento = 0;
+
+        $valorImposto = 0;
+        if (! empty($orderData['taxes']) && is_array($orderData['taxes'])) {
+            $valorImposto = collect($orderData['taxes'])->sum('amount');
+        }
+
+        $valorLiquido = $valorTotal - $taxaPlatform - $taxaPagamento - $valorFrete - $valorImposto;
+
+        return [
+            'valor_total' => $valorTotal,
+            'valor_frete' => $valorFrete,
+            'valor_desconto' => $valorDesconto,
+            'valor_produtos' => $valorProdutos,
+            'valor_taxa_platform' => round($taxaPlatform, 2),
+            'valor_taxa_pagamento' => round($taxaPagamento, 2),
+            'valor_imposto' => round($valorImposto, 2),
+            'valor_liquido' => round($valorLiquido, 2),
+        ];
+    }
+
+    /**
+     * Recalcula os campos financeiros de um pedido existente a partir do seu json_data.
+     */
+    public function recalculateOrderFinancials(MarketplacePedido $pedido): bool
+    {
+        $jsonData = $pedido->json_data;
+        if (! $jsonData) {
+            $jsonData = $pedido->order_json;
+        }
+
+        if (! $jsonData) {
+            return false;
+        }
+
+        $financials = $this->extractFinancials($jsonData);
+        $pedido->update($financials);
+
+        $empresa = Empresa::find($pedido->empresa_id);
+        $this->profitService->persistFinancialFields($pedido, $empresa);
+
+        return true;
     }
 
     protected function getAccessToken(): ?string
@@ -268,6 +353,56 @@ class MeliIntegrationService
         }
     }
 
+    public function getOrderPayments(string $orderId): array
+    {
+        $token = $this->getAccessToken();
+
+        if (! $token) {
+            return ['error' => 'Meli não conectado'];
+        }
+
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer '.$token,
+            ])->get("https://api.mercadolibre.com/orders/{$orderId}/payments");
+
+            if ($response->successful()) {
+                return $response->json();
+            }
+
+            return ['error' => $response->json() ?? 'Erro ao buscar pagamentos'];
+        } catch (\Exception $e) {
+            Log::error('Meli getOrderPayments exception: '.$e->getMessage());
+
+            return ['error' => $e->getMessage()];
+        }
+    }
+
+    public function getCart(string $cartId): array
+    {
+        $token = $this->getAccessToken();
+
+        if (! $token) {
+            return ['error' => 'Meli não conectado'];
+        }
+
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer '.$token,
+            ])->get("https://api.mercadolibre.com/carts/{$cartId}");
+
+            if ($response->successful()) {
+                return $response->json();
+            }
+
+            return ['error' => $response->json() ?? 'Erro ao buscar carrinho'];
+        } catch (\Exception $e) {
+            Log::error('Meli getCart exception: '.$e->getMessage());
+
+            return ['error' => $e->getMessage()];
+        }
+    }
+
     public function refreshOrder(int $orderId): array
     {
         if (! $this->isConnected()) {
@@ -371,7 +506,7 @@ class MeliIntegrationService
         }
     }
 
-    public function syncOrders(?string $dateFrom = null, ?string $dateTo = null): array
+    public function syncOrders(?string $dateFrom = null, ?string $dateTo = null, ?int $pageOffset = null): array
     {
         $limit = 50;
         if (! $this->isConnected()) {
@@ -380,9 +515,7 @@ class MeliIntegrationService
 
         try {
             $imported = 0;
-            $page = 0;
-            $maxPages = 5;
-            $maxOrders = 250;
+            $currentPage = $pageOffset ?? 0;
 
             $params = [
                 'limit' => $limit,
@@ -390,7 +523,6 @@ class MeliIntegrationService
             ];
 
             if ($dateFrom) {
-                // Mercado Livre pede ISO8601. Ex: 2024-03-01T00:00:00.000-00:00
                 $params['order_created_from'] = \Carbon\Carbon::parse($dateFrom)->startOfDay()->toIso8601String();
             }
 
@@ -400,25 +532,28 @@ class MeliIntegrationService
 
             Log::info('Meli syncOrders started - params: ' . json_encode($params));
 
-            while ($page < $maxPages && $imported < $maxOrders) {
-                $params['offset'] = $page * $limit;
+            while (true) {
+                $params['offset'] = $currentPage * $limit;
 
-                Log::info('Meli syncOrders - fetching page '.$page.' offset '.$params['offset']);
+                Log::info('Meli syncOrders - fetching page '.$currentPage.' offset '.$params['offset']);
 
                 $result = $this->getOrders($params);
 
                 if (isset($result['error'])) {
                     Log::error('Meli syncOrders - error: '.$result['error']);
-
                     return ['success' => false, 'message' => $result['error']];
                 }
 
                 $orders = $result['results'] ?? [];
-
-                Log::info('Meli syncOrders - got '.count($orders).' orders on page '.$page);
+                Log::info('Meli syncOrders - got '.count($orders).' orders on page '.$currentPage);
 
                 if (empty($orders)) {
-                    break;
+                    return [
+                        'success' => true, 
+                        'message' => "{$imported} pedidos sincronizados",
+                        'imported' => $imported,
+                        'has_more' => false
+                    ];
                 }
 
                 foreach ($orders as $order) {
@@ -426,19 +561,29 @@ class MeliIntegrationService
                     $imported++;
                 }
 
-                if (count($orders) < $limit) {
+                $hasMore = count($orders) === $limit;
+
+                // Se foi solicitado apenas uma página específica, retorna agora
+                if ($pageOffset !== null) {
+                    return [
+                        'success' => true,
+                        'message' => "Página {$pageOffset} sincronizada ({$imported} pedidos)",
+                        'imported' => $imported,
+                        'has_more' => $hasMore,
+                        'next_page' => $hasMore ? $pageOffset + 1 : null
+                    ];
+                }
+
+                if (! $hasMore) {
                     break;
                 }
 
-                $page++;
+                $currentPage++;
             }
 
-            Log::info('Meli syncOrders completed - imported: '.$imported);
-
-            return ['success' => true, 'message' => "{$imported} pedidos sincronizados"];
+            return ['success' => true, 'message' => "{$imported} pedidos sincronizados", 'has_more' => false];
         } catch (\Exception $e) {
             Log::error('Meli syncOrders exception: '.$e->getMessage().' - '.$e->getTraceAsString());
-
             return ['success' => false, 'message' => $e->getMessage()];
         }
     }
@@ -496,6 +641,26 @@ class MeliIntegrationService
         $buyer = $orderData['buyer'] ?? [];
         $shipping = $orderData['shipping'] ?? [];
         $payments = $orderData['payments'] ?? [];
+        
+        // Coletar JSONs específicos
+        $orderJson = $orderData; // A resposta de detailedOrder ou a original
+        $cartJson = null;
+        $paymentsJson = null;
+        $shipmentJson = null;
+
+        $cartId = $orderData['cart_id'] ?? null;
+        if ($cartId) {
+            $cartDetails = $this->getCart($cartId);
+            if (! isset($cartDetails['error'])) {
+                $cartJson = $cartDetails;
+            }
+        }
+
+        // Buscar pagamentos detalhados
+        $orderPayments = $this->getOrderPayments($orderId);
+        if (! isset($orderPayments['error'])) {
+            $paymentsJson = $orderPayments;
+        }
 
         $shippingAddress = $shipping['shipping_address'] ?? $orderData['shipping_address'] ?? [];
 
@@ -524,6 +689,10 @@ class MeliIntegrationService
                     if ($shipmentStatus === 'shipped' || $shipmentStatus === 'delivered') {
                         $status = $statusMap[$shipmentStatus] ?? $shipmentStatus;
                     }
+
+                    // Coletar JSON do shipment
+                    $shipmentJson = $shipment;
+
                     // Adicionar dados do shipment ao orderData
                     $orderData['shipment_details'] = [
                         'mode' => $shipment['mode'] ?? null,
@@ -545,56 +714,15 @@ class MeliIntegrationService
         $valorTotal = floatval($orderData['total_amount'] ?? 0);
         
         // Buscar custo real do frete via endpoint /shipments/{id}/costs
-        $valorFrete = 0;
         $shipmentId = $orderData['shipping']['id'] ?? null;
         if ($shipmentId) {
             $shippingCosts = $this->getShipmentCosts($shipmentId);
-            $valorFrete = floatval($shippingCosts['sender_cost'] ?? 0);
-            
-            // Adicionar dados completos de custo ao orderData para visualização no JSON técnico
+            // Adicionar dados completos de custo ao orderData para visualização no JSON técnico e recálculo
             $orderData['shipping_costs_details'] = $shippingCosts;
         }
-        // Fallback: usar shipping_cost do order se a API de costs não retornou nada
-        if ($valorFrete <= 0 && !empty($orderData['shipping_cost'])) {
-            $valorFrete = floatval($orderData['shipping_cost']);
-        }
-        
-        $valorProdutos = 0;
-        if (!empty($orderData['order_items'])) {
-            foreach ($orderData['order_items'] as $item) {
-                $valorProdutos += floatval($item['unit_price'] ?? 0) * intval($item['quantity'] ?? 1);
-            }
-        }
-        
-        $valorDesconto = floatval($orderData['discounts'] ?? 0);
 
-        // EXTRAÇÃO DE TARIFAS REAIS (Mercado Livre Sale Fee)
-        // O ML embute os subsídios (rebates) reduzindo a sale_fee nativa. Não usamos mais 12% fixo.
-        $taxaPlatform = 0;
-        if (!empty($orderData['order_items'])) {
-            foreach ($orderData['order_items'] as $item) {
-                if (isset($item['sale_fee'])) {
-                    $taxaPlatform += floatval($item['sale_fee']);
-                }
-            }
-        }
-        
-        // Fallback apenas se o ML estranhamente não enviar a tarifa (muito raro)
-        if ($taxaPlatform == 0 && $valorTotal > 0) {
-            $taxaPlatform = $valorTotal * 0.12; 
-        }
-
-        // No Mercado Livre, a taxa de pagamento do Mercado Pago já está embutida na tarifa de venda (sale_fee).
-        $taxaPagamento = 0;
-        
-        // Sum any official Taxes from ML Payload
-        $valorImposto = 0;
-        if (!empty($orderData['taxes']) && is_array($orderData['taxes'])) {
-            $valorImposto = collect($orderData['taxes'])->sum('amount');
-        }
-
-        // O valor_liquido definitivo usa a tarifa exata recebida.
-        $valorLiquido = $valorTotal - $taxaPlatform - $taxaPagamento - $valorFrete - $valorImposto;
+        // Usar a nova função centralizada para extrair os financeiros de forma consistente
+        $financials = $this->extractFinancials($orderData);
 
         // Buscar thumbnails dos produtos
         $orderItems = $orderData['order_items'] ?? [];
@@ -651,19 +779,23 @@ class MeliIntegrationService
                 'cidade' => $enderecoCidade ?: (isset($shippingAddress['city']) ? ($shippingAddress['city']['name'] ?? $shippingAddress['city']) : null),
                 'estado' => $enderecoEstado ?: (isset($shippingAddress['state']) ? ($shippingAddress['state']['name'] ?? $shippingAddress['state']) : null),
                 'cep' => $enderecoCep ?: ($shippingAddress['zip_code'] ?? null),
-                'valor_total' => $valorTotal,
-                'valor_frete' => $valorFrete,
-                'valor_desconto' => $valorDesconto,
-                'valor_produtos' => $valorProdutos,
-                'valor_taxa_platform' => round($taxaPlatform, 2),
-                'valor_taxa_pagamento' => round($taxaPagamento, 2),
-                'valor_imposto' => round($valorImposto, 2),
-                'valor_liquido' => round($valorLiquido, 2),
+                'valor_total' => $financials['valor_total'],
+                'valor_frete' => $financials['valor_frete'],
+                'valor_desconto' => $financials['valor_desconto'],
+                'valor_produtos' => $financials['valor_produtos'],
+                'valor_taxa_platform' => $financials['valor_taxa_platform'],
+                'valor_taxa_pagamento' => $financials['valor_taxa_pagamento'],
+                'valor_imposto' => $financials['valor_imposto'],
+                'valor_liquido' => $financials['valor_liquido'],
                 'data_compra' => isset($orderData['date_created']) ? \Carbon\Carbon::parse($orderData['date_created']) : null,
                 'data_pagamento' => isset($orderData['date_closed']) ? \Carbon\Carbon::parse($orderData['date_closed']) : null,
                 'codigo_rastreamento' => $shipping['tracking_number'] ?? null,
                 'url_rastreamento' => $shipping['tracking_url'] ?? null,
                 'json_data' => $orderData,
+                'order_json' => $orderJson,
+                'cart_json' => $cartJson,
+                'payments_json' => $paymentsJson,
+                'shipments_json' => $shipmentJson,
                 'import_hash' => $importHash,
                 'import_confirmed' => true,
                 'imported_at' => now(),
@@ -679,6 +811,9 @@ class MeliIntegrationService
         $this->baixaEstoqueAutomatica($pedido, $orderData);
 
         Log::info("Pedido {$orderData['id']} importado com sucesso. Hash: {$importHash}");
+
+        $empresa = Empresa::find($this->empresaId);
+        $this->profitService->persistFinancialFields($pedido, $empresa);
 
         return $pedido;
     }
@@ -701,29 +836,19 @@ class MeliIntegrationService
             Log::info("Pedido {$pedido->pedido_id} status alterado: {$pedido->status} -> {$newStatus}");
         }
 
-        // Recalcular valor_produtos se estiver zerado (ML não manda item_price no topo)
-        $valorProdutos = $pedido->valor_produtos;
-        if ($valorProdutos <= 0 && !empty($orderData['order_items'])) {
-            $valorProdutos = 0;
-            foreach ($orderData['order_items'] as $item) {
-                $valorProdutos += floatval($item['unit_price'] ?? 0) * intval($item['quantity'] ?? 1);
+        $existingJsonData = is_string($pedido->json_data) ? json_decode($pedido->json_data, true) : ($pedido->json_data ?? []);
+        $mergedJsonData = $existingJsonData;
+
+        // Let's replace only top-level primitives from the shallow API hit, leaving deep structures like billing_info and shipment_details untouched
+        foreach ($orderData as $key => $value) {
+            if (! is_array($value)) {
+                $mergedJsonData[$key] = $value;
+            } elseif (in_array($key, ['shipping', 'payments', 'order_items', 'feedback'])) {
+                // overwrite arrays if they came in fuller or differently
+                $mergedJsonData[$key] = $value;
             }
         }
 
-        $existingJsonData = is_string($pedido->json_data) ? json_decode($pedido->json_data, true) : ($pedido->json_data ?? []);
-        
-        $mergedJsonData = $existingJsonData;
-        
-        // Let's replace only top-level primitives from the shallow API hit, leaving deep structures like billing_info and shipment_details untouched
-        foreach ($orderData as $key => $value) {
-            if (!is_array($value)) {
-                $mergedJsonData[$key] = $value;
-            } elseif (in_array($key, ['shipping', 'payments', 'order_items', 'feedback'])) {
-                 // overwrite arrays if they came in fuller or differently
-                 $mergedJsonData[$key] = $value;
-            }
-        }
-        
         // Preserve billing_info and shipment_details explicitly just in case orderData came with them but empty
         if (isset($existingJsonData['billing_info']) && empty($orderData['billing_info'])) {
             $mergedJsonData['billing_info'] = $existingJsonData['billing_info'];
@@ -731,10 +856,13 @@ class MeliIntegrationService
         if (isset($existingJsonData['shipment_details']) && empty($orderData['shipment_details'])) {
             $mergedJsonData['shipment_details'] = $existingJsonData['shipment_details'];
         }
-        if (isset($existingJsonData['buyer']) && !empty($existingJsonData['buyer']['first_name']) && empty($orderData['buyer']['first_name'])) {
+        if (isset($existingJsonData['buyer']) && ! empty($existingJsonData['buyer']['first_name']) && empty($orderData['buyer']['first_name'])) {
             // Keep full buyer info if the new one is just a stub
             $mergedJsonData['buyer'] = $existingJsonData['buyer'];
         }
+
+        // Recalcular financeiros do JSON mesclado
+        $financials = $this->extractFinancials($mergedJsonData);
 
         $pedido->update([
             'status' => $newStatus,
@@ -742,10 +870,21 @@ class MeliIntegrationService
             'status_envio' => $mergedJsonData['shipping']['status'] ?? null,
             'codigo_rastreamento' => $mergedJsonData['shipping']['tracking_number'] ?? $pedido->codigo_rastreamento,
             'url_rastreamento' => $mergedJsonData['shipping']['tracking_url'] ?? $pedido->url_rastreamento,
-            'valor_produtos' => $valorProdutos,
+            'valor_total' => $financials['valor_total'],
+            'valor_frete' => $financials['valor_frete'],
+            'valor_desconto' => $financials['valor_desconto'],
+            'valor_produtos' => $financials['valor_produtos'],
+            'valor_taxa_platform' => $financials['valor_taxa_platform'],
+            'valor_taxa_pagamento' => $financials['valor_taxa_pagamento'],
+            'valor_imposto' => $financials['valor_imposto'],
+            'valor_liquido' => $financials['valor_liquido'],
             'json_data' => $mergedJsonData,
+            'order_json' => $orderData,
             'last_status_update' => now(),
         ]);
+
+        $empresa = Empresa::find($this->empresaId);
+        $this->profitService->persistFinancialFields($pedido, $empresa);
 
         return $pedido;
     }
