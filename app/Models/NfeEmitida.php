@@ -12,11 +12,8 @@ class NfeEmitida extends Model
     protected $table = 'nfe_emitidas';
 
     protected $fillable = [
-        'empresa_id',
-        'chave',
-        'pedido_marketplace',
-        'numero',
-        'serie',
+        'emitente_nome',
+        'emitente_cnpj',
         'cliente_nome',
         'cliente_cnpj',
         'valor_total',
@@ -24,6 +21,9 @@ class NfeEmitida extends Model
         'xml_path',
         'status',
         'status_nfe',
+        'tipo_fiscal',
+        'tp_nf',
+        'total_tributos',
         'devolvida',
         'nfe_devolucao_chave',
         'nfe_devolucao_numero',

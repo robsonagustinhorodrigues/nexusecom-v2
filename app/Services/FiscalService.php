@@ -14,41 +14,32 @@ use ZipArchive;
 class FiscalService
 {
     /**
-     * Determina se a NF-e é de entrada ou saída baseado no CNPJ.
+     * Determina se a NF-e é EMITIDA ou RECEBIDA e sua natureza (entrada/saida).
      */
-    private function verificarTipoNfe(string $chave, int $empresaId, ?int $tpNF = null, ?string $emitCnpj = null, ?string $destCnpj = null): string
+    private function verificarClassificacaoNfe(string $chave, int $empresaId, int $tpNF, ?string $emitCnpj = null, ?string $destCnpj = null): array
     {
         $empresa = \App\Models\Empresa::find($empresaId);
         if (!$empresa || empty($empresa->cnpj)) {
-            return 'recebida'; // Default to received if no company found
+            return ['categoria' => 'recebida', 'tipo_fiscal' => ($tpNF == 0 ? 'saida' : 'entrada')];
         }
         
         $cnpjEmpresa = ltrim(preg_replace('/[^0-9]/', '', $empresa->cnpj), '0');
-        
-        // Se temos o CNPJ do emitente explicitamente, usamos ele, senão extraímos da chave
         $cnpjEmitente = ltrim(preg_replace('/[^0-9]/', '', $emitCnpj ?: substr(preg_replace('/[^0-9]/', '', $chave), 6, 14)), '0');
-        
-        // Se o emitente é a própria empresa, é uma nota EMITIDA (Saída ou Entrada Própria)
+        $cnpjDest = $destCnpj ? ltrim(preg_replace('/[^0-9]/', '', $destCnpj), '0') : null;
+
+        // É EMITIDA se o emitente é a nossa empresa
         if (!empty($cnpjEmitente) && !empty($cnpjEmpresa) && $cnpjEmitente === $cnpjEmpresa) {
-            // Nota: Se a empresa tiver o mesmo CNPJ que um fornecedor (caso Meli), 
-            // ainda assim o SEFAZ trata a empresa como emissora se o CNPJ emitente for este.
-            return 'emitida';
-        }
-        
-        // Se o destinatário é a empresa e o emitente é outro, é RECEBIDA
-        if ($destCnpj) {
-            $cnpjDest = ltrim(preg_replace('/[^0-9]/', '', $destCnpj), '0');
-            if ($cnpjDest === $cnpjEmpresa && $cnpjEmitente !== $cnpjEmpresa) {
-                return 'recebida';
-            }
+            return [
+                'categoria' => 'emitida',
+                'tipo_fiscal' => ($tpNF == 0 ? 'entrada' : 'saida')
+            ];
         }
 
-        // Fallback para tpNF
-        if ($tpNF === 0 && $cnpjEmitente !== $cnpjEmpresa) {
-            return 'recebida';
-        }
-        
-        return 'recebida';
+        // Caso contrário, é RECEBIDA (Emitida por terceiros)
+        return [
+            'categoria' => 'recebida',
+            'tipo_fiscal' => ($tpNF == 0 ? 'saida' : 'entrada')
+        ];
     }
 
     /**
@@ -228,9 +219,11 @@ class FiscalService
             // Se a NF já foi devolvida anteriormente, usa os dados da devolução
             $jaDevolvida = $jaFoiDevolvida !== null;
 
-            // Determina se é nota de entrada ou saída
+            // Determina as classificações
             $tpNF = (int) ($infNFe->ide->tpNF ?? 1);
-            $tipoNfe = $forcedTipo ?: $this->verificarTipoNfe($chave, $empresaId, $tpNF, $emitenteCnpj, $destinatarioCnpj);
+            $classificacao = $this->verificarClassificacaoNfe($chave, $empresaId, $tpNF, $emitenteCnpj, $destinatarioCnpj);
+            $tipoNfe = $forcedTipo ?: $classificacao['categoria'];
+            $tipoFiscal = $classificacao['tipo_fiscal'];
 
             // Salva ou Atualiza
             if ($tipoNfe === 'emitida') {
@@ -247,6 +240,8 @@ class FiscalService
                         'cliente_nome' => $destinatarioNome,
                         'status' => $statusNFe,
                         'xml_path' => $this->saveXml($content, $chave, $empresaId, $dataEmissao),
+                        'tipo_fiscal' => $tipoFiscal,
+                        'tp_nf' => $tpNF,
                     ]
                 );
             } else {
@@ -268,6 +263,8 @@ class FiscalService
                         'nfe_devolvida_chave' => $jaDevolvida ? ($jaFoiDevolvida['chave_devolucao'] ?? null) : $nfeOrigemChave,
                         'nfe_devolvida_numero' => $jaDevolvida ? ($jaFoiDevolvida['numero_devolucao'] ?? null) : $nfeOrigemNumero,
                         'nfe_devolvida_serie' => $jaDevolvida ? ($jaFoiDevolvida['serie_devolucao'] ?? null) : $nfeOrigemSerie,
+                        'tipo_fiscal' => $tipoFiscal,
+                        'tp_nf' => $tpNF,
                     ]
                 );
             }
