@@ -242,8 +242,8 @@
                             </td>
                             <td class="px-6 py-4">
                                 <div class="flex flex-col">
-                                    <span class="text-xs font-black text-slate-300 italic uppercase" x-text="view === 'saidas' ? n.cliente_nome : n.emitente_nome"></span>
-                                    <span class="text-[10px] text-slate-500 font-mono" x-text="view === 'saidas' ? n.cliente_cnpj : n.emitente_cnpj"></span>
+                                    <span class="text-xs font-black text-slate-300 italic uppercase" x-text="n.counterparty_nome"></span>
+                                    <span class="text-[10px] text-slate-500 font-mono" x-text="n.counterparty_cnpj"></span>
                                     <span class="text-[9px] text-slate-600 font-mono" x-text="n.chave"></span>
                                 </div>
                             </td>
@@ -261,15 +261,15 @@
                             </td>
                             <td class="px-6 py-4 text-right">
                                 <div class="flex justify-end gap-2">
-                                    <a :href="'/nfe/danfe/' + n.id + '/' + (view === 'entradas' ? 'recebida' : 'emitida')" target="_blank" 
+                                    <a :href="'/nfe/danfe/' + n.id + '/' + n.categoria" target="_blank" 
                                        class="w-8 h-8 rounded-lg bg-indigo-600/10 text-indigo-400 flex items-center justify-center hover:bg-indigo-600 hover:text-white transition-all shadow-sm" title="DANFE A4">
                                         <i class="fas fa-print text-xs"></i>
                                     </a>
-                                    <a :href="'/nfe/danfe-simplificada/' + n.id + '/' + (view === 'entradas' ? 'recebida' : 'emitida')" target="_blank" 
+                                    <a :href="'/nfe/danfe-simplificada/' + n.id + '/' + n.categoria" target="_blank" 
                                        class="w-8 h-8 rounded-lg bg-blue-600/10 text-blue-400 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all shadow-sm" title="DANFE Simplificada">
                                         <i class="fas fa-receipt text-xs"></i>
                                     </a>
-                                    <a :href="'/nfe/download-xml/' + n.id + '/' + (view === 'entradas' ? 'recebida' : 'emitida')" 
+                                    <a :href="'/nfe/download-xml/' + n.id + '/' + n.categoria" 
                                        class="w-8 h-8 rounded-lg bg-amber-600/10 text-amber-400 flex items-center justify-center hover:bg-amber-600 hover:text-white transition-all shadow-sm" title="Baixar XML">
                                         <i class="fas fa-file-code text-xs"></i>
                                     </a>

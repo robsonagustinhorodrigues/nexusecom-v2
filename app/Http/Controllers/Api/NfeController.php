@@ -12,69 +12,69 @@ class NfeController extends Controller
     public function index(Request $request)
     {
         $empresaId = $request->get('empresa', $request->get('empresa_id', session('empresa_id', 6)));
-        $viewArg = $request->get('tipo', $request->get('view', 'entradas'));
-        $view = ($viewArg === 'emitidas' || $viewArg === 'saidas') ? 'emitidas' : 'recebidas';
-
-        if ($view === 'emitidas') {
-            $query = NfeEmitida::where('empresa_id', $empresaId);
-        } else {
-            $query = NfeRecebida::where('empresa_id', $empresaId);
-        }
-
-        // Filters
-        if ($request->search) {
-            $query->where(function ($q) use ($request, $view) {
-                $q->where('chave', 'like', "%{$request->search}%")
-                    ->orWhere('numero', 'like', "%{$request->search}%");
-                
-                if ($view === 'emitidas') {
-                    $q->orWhere('cliente_nome', 'like', "%{$request->search}%");
-                } else {
-                    $q->orWhere('emitente_nome', 'like', "%{$request->search}%");
-                }
-            });
-        }
-
-        // Filter by situacao (status)
-        if ($request->situacao) {
-            $query->where('status_nfe', $request->situacao);
-        }
-
-        if ($request->status) {
-            $query->where('status_nfe', $request->status);
-        }
-
-        if ($request->nome) {
-            $campoNome = $view === 'recebidas' ? 'emitente_nome' : 'cliente_nome';
-            $query->where($campoNome, 'like', "%{$request->nome}%");
-        }
-
-        // Date filters from frontend
-        if ($request->data_inicio) {
-            $query->whereDate('data_emissao', '>=', $request->data_inicio);
-        }
-
-        if ($request->data_fim) {
-            $query->whereDate('data_emissao', '<=', $request->data_fim);
-        }
-
-        if ($request->data_de) {
-            $query->whereDate('data_emissao', '>=', $request->data_de);
-        }
-
-        if ($request->data_ate) {
-            $query->whereDate('data_emissao', '<=', $request->data_ate);
-        }
-
-        // Compute aggregates from the full query before pagination
-        $aggregates = (clone $query)->selectRaw('COALESCE(SUM(valor_total), 0) as total_value, COUNT(*) as total_count')->first();
-        $canceladasCount = (clone $query)->where('status_nfe', 'cancelada')->count();
-
-        $nfes = $query->orderBy('data_emissao', 'desc')->paginate($request->per_page ?? 100);
+        $viewArg = $request->get('tipo', $request->get('view', 'saidas')); // Default para saídas
+        
+        // Normalização semântica: Entradas vs Saídas
+        $movementType = ($viewArg === 'entradas' || $viewArg === 'recebidas') ? 'entrada' : 'saida';
 
         $empresa = \App\Models\Empresa::find($empresaId);
         $empresaNome = $empresa ? $empresa->nome : 'Empresa';
         $empresaCnpj = $empresa ? $empresa->cnpj : '';
+
+        // Query para notas EMITIDAS (onde a empresa é a emissora)
+        $qEmitidas = \DB::table('nfe_emitidas')
+            ->select(
+                'id', 'chave', 'numero', 'serie', 'valor_total', 'data_emissao', 'tipo_fiscal', 'empresa_id',
+                'cliente_nome as counterparty_nome', 'cliente_cnpj as counterparty_cnpj',
+                'status as status_nfe',
+                \DB::raw("'emitida' as origin")
+            )
+            ->where('empresa_id', $empresaId)
+            ->where('tipo_fiscal', $movementType);
+
+        // Query para notas RECEBIDAS (onde terceiros são os emissores)
+        $qRecebidas = \DB::table('nfe_recebidas')
+            ->select(
+                'id', 'chave', 'numero', 'serie', 'valor_total', 'data_emissao', 'tipo_fiscal', 'empresa_id',
+                'emitente_nome as counterparty_nome', 'emitente_cnpj as counterparty_cnpj',
+                'status_nfe',
+                \DB::raw("'recebida' as origin")
+            )
+            ->where('empresa_id', $empresaId)
+            ->where('tipo_fiscal', $movementType);
+
+        // Define a query base combinada
+        $unionQuery = $qEmitidas->union($qRecebidas);
+        $query = \DB::table(\DB::raw("({$unionQuery->toSql()}) as combined"))
+            ->mergeBindings($unionQuery);
+
+        // Filtros de busca
+        if ($request->search) {
+            $query->where(function ($q) use ($request) {
+                $q->where('chave', 'like', "%{$request->search}%")
+                    ->orWhere('numero', 'like', "%{$request->search}%")
+                    ->orWhere('counterparty_nome', 'like', "%{$request->search}%");
+            });
+        }
+
+        if ($request->situacao || $request->status) {
+            $query->where('status_nfe', $request->situacao ?: $request->status);
+        }
+
+        if ($request->data_inicio || $request->data_de) {
+            $query->whereDate('data_emissao', '>=', $request->data_inicio ?: $request->data_de);
+        }
+
+        if ($request->data_fim || $request->data_ate) {
+            $query->whereDate('data_emissao', '<=', $request->data_fim ?: $request->data_ate);
+        }
+
+        // Agregados
+        $aggregates = (clone $query)->selectRaw('COALESCE(SUM(valor_total), 0) as total_value, COUNT(*) as total_count')->first();
+        $canceladasCount = (clone $query)->where('status_nfe', 'cancelada')->count();
+
+        // Paginação
+        $nfes = $query->orderBy('data_emissao', 'desc')->paginate($request->per_page ?? 100);
 
         return response()->json([
             'aggregates' => [
@@ -82,26 +82,25 @@ class NfeController extends Controller
                 'total_count' => intval($aggregates->total_count ?? 0),
                 'canceladas_count' => $canceladasCount,
             ],
-            'data' => $nfes->map(function ($nfe) use ($view, $empresaNome, $empresaCnpj) {
+            'data' => collect($nfes->items())->map(function ($nfe) use ($empresaNome, $empresaCnpj) {
                 return [
                     'id' => $nfe->id,
                     'chave' => $nfe->chave,
                     'numero' => $nfe->numero,
                     'serie' => $nfe->serie,
-                    // Se é emitida, o emitente somos nós. Se é recebida, o emitente é o fornecedor.
-                    'emitente_nome' => $view === 'emitidas' ? $empresaNome : ($nfe->emitente_nome ?? 'N/D'),
-                    'emitente_cnpj' => $view === 'emitidas' ? $empresaCnpj : ($nfe->emitente_cnpj ?? 'N/D'),
-                    // Se é emitida, o cliente é o destinatário. Se é recebida, o cliente somos nós.
-                    'cliente_nome' => $view === 'emitidas' ? ($nfe->cliente_nome ?? 'N/D') : $empresaNome,
-                    'cliente_cnpj' => $view === 'emitidas' ? ($nfe->cliente_cnpj ?? 'N/D') : $empresaCnpj,
+                    // Lógica Dinâmica de Exibição
+                    'emitente_nome' => ($nfe->origin === 'emitida') ? $empresaNome : $nfe->counterparty_nome,
+                    'emitente_cnpj' => ($nfe->origin === 'emitida') ? $empresaCnpj : $nfe->counterparty_cnpj,
+                    'cliente_nome' => ($nfe->origin === 'emitida') ? $nfe->counterparty_nome : $empresaNome,
+                    'cliente_cnpj' => ($nfe->origin === 'emitida') ? $nfe->counterparty_cnpj : $empresaCnpj,
+                    'counterparty_nome' => $nfe->counterparty_nome,
+                    'counterparty_cnpj' => $nfe->counterparty_cnpj,
                     'valor_total' => floatval($nfe->valor_total),
                     'data_emissao' => $nfe->data_emissao,
-                    'data_recebimento' => $nfe->data_recebimento ?? null,
                     'status_nfe' => $nfe->status_nfe,
-                    'status_manifestacao' => $nfe->status_manifestacao ?? null,
+                    'tipo_fiscal' => $nfe->tipo_fiscal,
+                    'categoria' => $nfe->origin,
                     'xml_path' => $nfe->xml_path,
-                    'devolucao' => $nfe->devolucao ?? false,
-                    'created_at' => $nfe->created_at,
                 ];
             }),
             'current_page' => $nfes->currentPage(),
@@ -118,41 +117,25 @@ class NfeController extends Controller
 
     public function show($id)
     {
-        // Try recebidas first, then emitidas
-        $nfe = NfeRecebida::find($id);
-        $view = 'recebidas';
-
-        if (! $nfe) {
-            $nfe = NfeEmitida::find($id);
-            $view = 'emitidas';
-        }
+        // Tenta encontrar em ambas as tabelas
+        $nfe = NfeRecebida::find($id) ?? NfeEmitida::find($id);
 
         if (! $nfe) {
             return response()->json(['error' => 'NF-e não encontrada'], 404);
         }
 
-        return response()->json([
-            'id' => $nfe->id,
-            'chave' => $nfe->chave,
-            'numero' => $nfe->numero,
-            'serie' => $nfe->serie,
-            'emitente_nome' => $nfe->emitente_nome ?? $nfe->cliente_nome,
-            'emitente_cnpj' => $nfe->emitente_cnpj ?? $nfe->cliente_cnpj,
-            'cliente_nome' => $nfe->cliente_nome,
-            'cliente_cnpj' => $nfe->cliente_cnpj,
-            'valor_total' => floatval($nfe->valor_total),
-            'valor_frete' => floatval($nfe->valor_frete ?? 0),
-            'valor_desconto' => floatval($nfe->valor_desconto ?? 0),
-            'valor_icms' => floatval($nfe->valor_icms ?? 0),
-            'data_emissao' => $nfe->data_emissao,
-            'data_recebimento' => $nfe->data_recebimento,
-            'status_nfe' => $nfe->status_nfe,
-            'status_manifestacao' => $nfe->status_manifestacao ?? null,
-            'xml_path' => $nfe->xml_path,
-            'devolucao' => $nfe->devolucao ?? false,
-            'view' => $view,
-        ]);
+        $categoria = ($nfe instanceof NfeEmitida) ? 'emitida' : 'recebida';
+
+        $data = $nfe->toArray();
+        $data['categoria'] = $categoria;
+        
+        // Ensure values are floats for JSON
+        $data['valor_total'] = floatval($nfe->valor_total);
+        $data['valor_frete'] = floatval($nfe->valor_frete ?? 0);
+        
+        return response()->json($data);
     }
+
 
     public function import(Request $request)
     {
