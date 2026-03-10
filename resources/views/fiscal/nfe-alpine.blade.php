@@ -5,193 +5,213 @@
 
 @section('content')
 <div x-data="fiscalPage()" x-init="init()">
-    <!-- Header com Filtros e Ações -->
-    <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4 mb-8">
-        <div>
-            <h2 class="text-2xl font-black text-white tracking-tight italic uppercase">Monitor de Notas Fiscais</h2>
-            <p class="text-sm text-slate-400 italic underline decoration-indigo-500/50 decoration-2 underline-offset-4">Consulte até 60 dias retroativos • Integração SEFAZ & Gestão de XML</p>
-        </div>
-
-        <div class="flex flex-wrap items-center gap-3 bg-slate-800 p-2 rounded-2xl border border-slate-700 shadow-lg">
-            <div class="flex items-center gap-2 px-3 border-r border-slate-700">
-                <input type="date" x-model="dataInicio" @change="currentPage = 1; loadNfe()" class="bg-slate-900 border-none text-white font-black italic text-xs uppercase rounded-xl px-3 py-2 focus:ring-indigo-500 outline-none">
-                <span class="text-slate-600 font-black italic">A</span>
-                <input type="date" x-model="dataFim" @change="currentPage = 1; loadNfe()" class="bg-slate-900 border-none text-white font-black italic text-xs uppercase rounded-xl px-3 py-2 focus:ring-indigo-500 outline-none">
+    <!-- Premium Dashboard Header -->
+    <div class="space-y-4 mb-6">
+        <!-- Top Row: Title & Global Actions -->
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+                <h1 class="text-3xl font-black text-white tracking-tighter uppercase italic flex items-center gap-3">
+                    <span class="bg-indigo-600 w-2 h-8 rounded-full"></span>
+                    Hub <span class="text-indigo-500">Fiscal</span>
+                </h1>
+                <p class="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] ml-5">Monitor de Notas Fiscais • SEFAZ & XML</p>
             </div>
-            
-            <select x-model="view" @change="filtroSituacao = ''; currentPage = 1; loadNfe()" class="bg-slate-900 border-none text-white font-black italic text-xs uppercase rounded-xl px-4 py-2 focus:ring-indigo-500 outline-none">
-                <option value="recebidas">📥 Recebidas</option>
-                <option value="emitidas">📤 Emitidas</option>
-            </select>
 
-            <select x-model="filtroSituacao" @change="currentPage = 1; loadNfe()" class="bg-slate-900 border-none text-white font-black italic text-xs uppercase rounded-xl px-4 py-2 focus:ring-indigo-500 outline-none">
-                <option value="">Todas as Situações</option>
-                <option value="autorizada">Autorizada</option>
-                <option value="cancelada">Cancelada</option>
-                <option value="denegada">Denegada</option>
-                <option value="inutilizada">Inutilizada</option>
-            </select>
+            <div class="flex items-center gap-3">
+                <!-- Importing indicator -->
+                <div x-show="importing" class="flex items-center gap-2 px-3 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-indigo-400 text-xs font-bold animate-pulse shadow-inner">
+                    <i class="fas fa-circle-notch fa-spin"></i>
+                    <span>Processando...</span>
+                </div>
 
-            <!-- Botão de Funções (Dropdown) -->
-            <div class="relative">
-                <button @click="importMenu = !importMenu" :disabled="importing" 
-                        class="w-10 h-10 bg-slate-700 hover:bg-slate-600 border border-slate-600 text-white rounded-xl transition-all flex items-center justify-center shadow-lg"
-                        title="Funções e Importações">
-                    <i class="fas fa-ellipsis-v" :class="importing || loading ? 'animate-spin' : ''"></i>
-                </button>
-                
-                <!-- Dropdown Menu -->
-                <div x-show="importMenu" @click.away="importMenu = false" x-cloak
-                     class="absolute right-0 mt-2 w-72 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl z-50 overflow-hidden">
-                    <div class="p-2">
-                        <p class="text-[10px] font-black text-slate-500 uppercase px-3 py-2">Processamento</p>
-                        
+                <!-- Actions Menu -->
+                <div class="relative">
+                    <button @click="importMenu = !importMenu" :disabled="importing"
+                        class="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl flex items-center gap-3 text-sm text-white font-bold transition-all shadow-lg active:scale-95 disabled:opacity-50">
+                        <i class="fas fa-cog" :class="importing ? 'fa-spin' : ''"></i>
+                        <span>Ações</span>
+                        <i class="fas fa-chevron-down text-[10px] text-slate-500"></i>
+                    </button>
+
+                    <div x-show="importMenu" @click.away="importMenu = false" x-cloak
+                        x-transition:enter="transition ease-out duration-100"
+                        x-transition:enter-start="opacity-0 scale-95"
+                        x-transition:enter-end="opacity-100 scale-100"
+                        class="absolute right-0 mt-2 w-72 bg-black border border-slate-700/50 backdrop-blur-xl rounded-2xl shadow-2xl z-50 overflow-hidden py-1">
+
                         <button @click="importMenu = false; reprocessSelected()" :disabled="selected.length === 0"
-                                class="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-left hover:bg-slate-700/50 transition-colors disabled:opacity-30">
-                            <div class="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
-                                <i class="fas fa-sync text-amber-400 text-sm"></i>
+                                class="w-full px-4 py-3 text-left text-sm text-slate-300 hover:bg-white/5 hover:text-white flex items-center gap-3 transition-colors disabled:opacity-30">
+                            <div class="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                                <i class="fas fa-sync text-amber-400"></i>
                             </div>
-                            <div>
-                                <p class="text-xs font-bold text-white">Reprocessar Associação</p>
-                                <p class="text-[10px] text-slate-500" x-text="selected.length > 0 ? 'Reprocessar ' + selected.length + ' notas' : 'Selecione notas para reprocessar'"></p>
-                            </div>
-                        </button>
-
-                        <div class="h-px bg-slate-700/50 my-1 mx-2"></div>
-                        
-                        <p class="text-[10px] font-black text-slate-500 uppercase px-3 py-2">Importação (Fila)</p>
-                        
-                        <button @click="importMenu = false; showImportMeli = true; meliDataInicio = dataInicio; meliDataFim = dataFim" 
-                                class="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-left hover:bg-slate-700/50 transition-colors">
-                            <div class="w-8 h-8 rounded-lg bg-yellow-500/20 flex items-center justify-center">
-                                <i class="fab fa-mercadolivre text-yellow-400 text-sm"></i>
-                            </div>
-                            <div>
-                                <p class="text-xs font-bold text-white">Mercado Livre</p>
-                                <p class="text-[10px] text-slate-500">Importar NF-es por data</p>
+                            <div class="flex flex-col">
+                                <span class="font-bold">Reprocessar Associação</span>
+                                <span class="text-[10px] text-slate-500" x-text="selected.length > 0 ? selected.length + ' notas selecionadas' : 'Selecione notas'"></span>
                             </div>
                         </button>
 
-                        <button @click="importMenu = false; canSearchSefaz ? importFromSefaz() : null" 
+                        <div class="h-px bg-slate-700/30 mx-3"></div>
+
+                        <button @click="importMenu = false; showImportMeli = true; meliDataInicio = dataInicio; meliDataFim = dataFim"
+                                class="w-full px-4 py-3 text-left text-sm text-slate-300 hover:bg-white/5 hover:text-white flex items-center gap-3 transition-colors">
+                            <div class="w-8 h-8 rounded-lg bg-yellow-500/10 flex items-center justify-center">
+                                <i class="fab fa-mercadolivre text-yellow-400"></i>
+                            </div>
+                            <div class="flex flex-col">
+                                <span class="font-bold">Mercado Livre</span>
+                                <span class="text-[10px] text-slate-500">Importar NF-es por data</span>
+                            </div>
+                        </button>
+
+                        <button @click="importMenu = false; canSearchSefaz ? importFromSefaz() : null"
                                 :class="!canSearchSefaz ? 'opacity-30 cursor-not-allowed' : ''"
-                                class="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-left hover:bg-slate-700/50 transition-colors">
-                            <div class="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                                <i class="fas fa-file-invoice-dollar text-blue-400 text-sm"></i>
+                                class="w-full px-4 py-3 text-left text-sm text-slate-300 hover:bg-white/5 hover:text-white flex items-center gap-3 transition-colors border-t border-white/5">
+                            <div class="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                                <i class="fas fa-satellite-dish text-blue-400"></i>
                             </div>
-                            <div>
-                                <p class="text-xs font-bold text-white">Buscar NF-e SEFAZ</p>
-                                <p class="text-[10px] text-slate-500" x-text="canSearchSefaz ? 'Consultar novos NSUs' : 'Aguarde: ' + sefazCountdown"></p>
+                            <div class="flex flex-col">
+                                <span class="font-bold">Buscar SEFAZ</span>
+                                <span class="text-[10px] text-slate-500" x-text="canSearchSefaz ? 'Consultar novos NSUs' : 'Aguarde: ' + sefazCountdown"></span>
                             </div>
                         </button>
 
-                        <div class="h-px bg-slate-700/50 my-1 mx-2"></div>
+                        <div class="h-px bg-slate-700/30 mx-3"></div>
 
-                        <button @click="importMenu = false; showImportXml = true" 
-                                class="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-left hover:bg-slate-700/50 transition-colors">
-                            <div class="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
-                                <i class="fas fa-file-code text-emerald-400 text-sm"></i>
+                        <button @click="importMenu = false; showImportXml = true"
+                                class="w-full px-4 py-3 text-left text-sm text-slate-300 hover:bg-white/5 hover:text-white flex items-center gap-3 transition-colors">
+                            <div class="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                                <i class="fas fa-file-code text-emerald-400"></i>
                             </div>
-                            <div>
-                                <p class="text-xs font-bold text-white">XML / ZIP</p>
-                                <p class="text-[10px] text-slate-500">Importar manual</p>
+                            <div class="flex flex-col">
+                                <span class="font-bold">XML / ZIP</span>
+                                <span class="text-[10px] text-slate-500">Importar manual</span>
                             </div>
                         </button>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- Grid de Métricas -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <div class="bg-slate-800 border border-slate-700 rounded-3xl p-6 shadow-xl group hover:border-indigo-500/30 transition-all relative overflow-hidden">
-            <div class="relative z-10">
-                <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Status SEFAZ</p>
-                <div class="flex items-baseline gap-2">
-                    <h3 class="text-xl font-black text-white italic" x-text="empresaStats.last_nsu || '0'">0</h3>
-                    <span class="text-[10px] text-slate-500 font-bold uppercase italic">NSU</span>
+        <!-- Stats Bar -->
+        <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            <!-- SEFAZ Status -->
+            <div class="bg-gradient-to-br from-indigo-600/20 to-transparent border border-indigo-500/20 rounded-2xl p-4 shadow-xl backdrop-blur-sm group">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-[10px] font-black text-indigo-400 uppercase tracking-widest">SEFAZ NSU</span>
+                    <i class="fas fa-satellite-dish text-indigo-500 group-hover:scale-110 transition-transform"></i>
                 </div>
-                <div class="mt-4 flex flex-col gap-1">
+                <div class="text-2xl font-black text-white" x-text="empresaStats.last_nsu || '0'"></div>
+                <div class="mt-1 text-[9px] text-slate-500 font-bold" x-text="empresaStats.last_sefaz_at || 'Nunca'"></div>
+            </div>
+
+            <!-- Volume Financeiro -->
+            <div class="bg-gradient-to-br from-emerald-600/20 to-transparent border border-emerald-500/20 rounded-2xl p-4 shadow-xl backdrop-blur-sm group">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Volume</span>
+                    <i class="fas fa-dollar-sign text-emerald-500 group-hover:scale-110 transition-transform"></i>
+                </div>
+                <div class="text-2xl font-black text-white" x-text="formatMoney(totalValue)"></div>
+                <div class="mt-1 h-1 w-12 bg-emerald-500/50 rounded-full"></div>
+            </div>
+
+            <!-- Total Notas -->
+            <div class="bg-gradient-to-br from-slate-800 to-transparent border border-slate-700/50 rounded-2xl p-4 shadow-xl backdrop-blur-sm group">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Notas</span>
+                    <i class="fas fa-file-invoice text-slate-500 group-hover:scale-110 transition-transform"></i>
+                </div>
+                <div class="text-2xl font-black text-white" x-text="total"></div>
+                <div class="mt-1 h-1 w-12 bg-slate-500/50 rounded-full"></div>
+            </div>
+
+            <!-- Selecionados Contextual -->
+            <div class="col-span-2 lg:col-span-2 grid grid-cols-2 gap-3">
+                <div class="bg-slate-900/60 border border-indigo-500/30 rounded-2xl p-4 shadow-xl border-dashed">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-[10px] font-black text-indigo-300 uppercase tracking-widest">Selecionadas</span>
+                        <i class="fas fa-check-double text-indigo-400"></i>
+                    </div>
+                    <div class="text-2xl font-black text-white" x-text="selected.length"></div>
+                </div>
+                <div class="bg-slate-900/60 border border-indigo-500/30 rounded-2xl p-4 shadow-xl border-dashed">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-[10px] font-black text-indigo-300 uppercase tracking-widest">Valor Seleção</span>
+                        <i class="fas fa-calculator text-indigo-400"></i>
+                    </div>
+                    <div class="text-2xl font-black text-indigo-400" x-text="formatMoney(totalSelecionadas)"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filters & Control Bar -->
+        <div class="relative">
+            <div class="bg-slate-800/80 backdrop-blur-md border border-slate-700/50 rounded-2xl p-3 shadow-2xl flex flex-wrap items-center gap-3 transition-all">
+
+                <!-- Search -->
+                <div class="flex-1 min-w-[200px] relative group">
+                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-indigo-500 transition-colors"></i>
+                    <input type="text" x-model="search" @input.debounce.300ms="loadNfe()"
+                        placeholder="Pesquisar número, chave, fornecedor..."
+                        class="w-full bg-slate-900/50 border border-slate-700/50 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 focus:outline-none transition-all">
+                </div>
+
+                <!-- Date Range -->
+                <div class="flex items-center bg-slate-900/50 border border-slate-700/50 rounded-xl px-2 gap-2">
+                    <input type="date" x-model="dataInicio" @change="loadNfe()" class="bg-transparent border-none py-2 text-xs text-slate-300 focus:ring-0 outline-none">
+                    <span class="text-slate-600 font-bold text-[10px]">ATÉ</span>
+                    <input type="date" x-model="dataFim" @change="loadNfe()" class="bg-transparent border-none py-2 text-xs text-slate-300 focus:ring-0 outline-none">
+                </div>
+
+                <!-- Category Filters -->
+                <div class="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 md:pb-0">
+                    <select x-model="view" @change="filtroSituacao = ''; loadNfe()" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-300 focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none cursor-pointer">
+                        <option value="entradas" class="bg-black">📥 Entradas</option>
+                        <option value="saidas" class="bg-black">📤 Saídas</option>
+                    </select>
+
+                    <select x-model="filtroSituacao" @change="loadNfe()" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-400 focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none cursor-pointer">
+                        <option value="" class="bg-black">Situação</option>
+                        <option value="autorizada" class="bg-black">✅ Autorizada</option>
+                        <option value="cancelada" class="bg-black">❌ Cancelada</option>
+                        <option value="denegada" class="bg-black">⛔ Denegada</option>
+                        <option value="inutilizada" class="bg-black">🚫 Inutilizada</option>
+                    </select>
+
+                    <select x-model="associationFilter" @change="loadNfe()" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-400 focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none cursor-pointer">
+                        <option value="" class="bg-black">Associação</option>
+                        <option value="pending" class="bg-black">🟡 Pendentes</option>
+                        <option value="partial" class="bg-black">🔵 Parciais</option>
+                        <option value="associated" class="bg-black">🟢 Associadas</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Selection Overlay -->
+            <template x-if="selected.length > 0">
+                <div x-transition:enter="transition ease-out duration-200"
+                    x-transition:enter-start="opacity-0 translate-y-4"
+                    x-transition:enter-end="opacity-100 translate-y-0"
+                    class="absolute inset-0 bg-indigo-600 rounded-2xl flex items-center justify-between px-6 shadow-2xl z-10 border border-indigo-400/50">
+                    <div class="flex items-center gap-4">
+                        <i class="fas fa-check-circle text-2xl text-white"></i>
+                        <span class="text-white font-black text-lg" x-text="selected.length + ' Notas Selecionadas'"></span>
+                        <span class="bg-white/20 px-3 py-1 rounded-full text-xs text-white font-bold" x-text="formatMoney(totalSelecionadas)"></span>
+                    </div>
                     <div class="flex items-center gap-2">
-                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Última Consulta:</span>
+                        <button @click="exportSelectedXml()" class="px-5 py-2.5 bg-white text-indigo-600 rounded-xl font-black text-sm hover:bg-slate-100 transition-all flex items-center gap-2 shadow-lg active:scale-95">
+                            <i class="fas fa-file-export"></i> Exportar XML
+                        </button>
+                        <button @click="selected = []" class="p-2.5 bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl transition-all">
+                            <i class="fas fa-times"></i>
+                        </button>
                     </div>
-                    <span class="text-[10px] text-indigo-400 font-black italic" x-text="empresaStats.last_sefaz_at || 'Nunca consultado'"></span>
                 </div>
-            </div>
-            <i class="fas fa-satellite-dish absolute -right-4 -bottom-4 text-6xl text-slate-700/20 group-hover:text-indigo-500/10 transition-colors"></i>
-        </div>
-
-        <div class="bg-slate-800 border border-slate-700 rounded-3xl p-6 shadow-xl group hover:border-emerald-500/30 transition-all">
-            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Total Selecionadas</p>
-            <h3 class="text-2xl font-black text-emerald-400 italic" x-text="formatMoney(totalSelecionadas)">R$ 0,00</h3>
-            <div class="mt-4 flex items-center gap-2 text-white">
-                <span class="px-2 py-0.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-black italic uppercase" x-text="selected.length + ' notas'"></span>
-            </div>
-        </div>
-
-        <div class="bg-slate-800 border border-slate-700 rounded-3xl p-6 shadow-xl group hover:border-amber-500/30 transition-all">
-            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Volume Financeiro</p>
-            <h3 class="text-2xl font-black text-amber-400 italic" x-text="formatMoney(totalValue)">R$ 0,00</h3>
-            <div class="mt-4 flex items-center gap-2">
-                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Notas Listadas</span>
-            </div>
-        </div>
-
-        <div class="bg-slate-800 border border-slate-700 rounded-3xl p-6 shadow-xl group hover:border-rose-500/30 transition-all">
-            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Canceladas</p>
-            <h3 class="text-2xl font-black text-rose-400 italic" x-text="canceladasCount">0</h3>
-            <div class="mt-4 flex items-center gap-2 text-white">
-                <span class="px-2 py-0.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-[10px] font-black italic uppercase">Notas Inválidas</span>
-            </div>
+            </template>
         </div>
     </div>
 
     <!-- Tabela de Notas -->
     <div class="bg-slate-800 border border-slate-700 rounded-3xl overflow-hidden shadow-2xl">
-        <div class="p-4 border-b border-slate-700 bg-slate-900/50">
-            <!-- Header Compacto -->
-            <div class="flex items-center justify-between gap-4">
-                <div class="flex items-center gap-3">
-                    <button @click="filtersOpen = !filtersOpen" class="flex items-center gap-2 text-slate-400 hover:text-white transition">
-                        <i class="fas" :class="filtersOpen ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
-                        <h3 class="font-black text-white italic uppercase tracking-tighter" x-text="'Listagem de Notas ' + (view === 'recebidas' ? 'Recebidas' : 'Emitidas')"></h3>
-                    </button>
-                </div>
-                <div class="flex items-center gap-3">
-                    <div class="relative w-48">
-                        <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 text-xs"></i>
-                        <input type="text" x-model="search" @input.debounce.300ms="currentPage = 1; loadNfe()" placeholder="Buscar..." 
-                               class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-4 py-2 text-xs font-bold italic text-white focus:border-indigo-500 outline-none">
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Filtros Colapsáveis -->
-            <div x-show="filtersOpen" x-collapse class="mt-4 pt-4 border-t border-slate-700/50">
-                <div class="flex flex-wrap items-center gap-4">
-                    <div class="flex items-center gap-2">
-                        <span class="text-[10px] font-black text-slate-500 uppercase italic">Data:</span>
-                        <input type="date" x-model="dataInicio" @change="currentPage = 1; loadNfe()" 
-                               class="bg-slate-900 border-none text-white font-black italic text-xs uppercase rounded-lg px-2 py-1">
-                        <span class="text-slate-600">até</span>
-                        <input type="date" x-model="dataFim" @change="currentPage = 1; loadNfe()" 
-                               class="bg-slate-900 border-none text-white font-black italic text-xs uppercase rounded-lg px-2 py-1">
-                    </div>
-                    
-                    <div class="flex items-center gap-2">
-                        <span class="text-[10px] font-black text-slate-500 uppercase italic">Associação:</span>
-                        <select x-model="associationFilter" @change="currentPage = 1; loadNfe()" 
-                                class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1 text-xs font-bold italic text-white focus:border-indigo-500 outline-none">
-                            <option value="">Todas</option>
-                            <option value="pending">Pendentes</option>
-                            <option value="partial">Parciais</option>
-                            <option value="associated">Associadas</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-        </div>
         
         <div class="overflow-x-auto">
             <table class="w-full border-collapse">
@@ -201,7 +221,7 @@
                             <input type="checkbox" @change="toggleAll($event.target.checked)" class="rounded bg-slate-700 border-slate-600 text-indigo-500">
                         </th>
                         <th class="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest italic text-left">Número / Data</th>
-                        <th class="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest italic text-left">Emitente / Destinatário</th>
+                        <th class="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest italic text-left" x-text="view === 'saidas' ? 'Cliente / Destinatário' : 'Fornecedor / Emitente'">Emitente / Destinatário</th>
                         <th class="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest italic text-right">Valor Total</th>
                         <th class="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest italic text-center">Status</th>
                         <th class="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest italic text-center">Associação</th>
@@ -222,8 +242,8 @@
                             </td>
                             <td class="px-6 py-4">
                                 <div class="flex flex-col">
-                                    <span class="text-xs font-black text-slate-300 italic uppercase" x-text="n.emitente_nome || n.cliente_nome || '-'"></span>
-                                    <span class="text-[10px] text-slate-500 font-mono" x-text="n.emitente_cnpj || n.cliente_cnpj || '-'"></span>
+                                    <span class="text-xs font-black text-slate-300 italic uppercase" x-text="view === 'saidas' ? n.cliente_nome : n.emitente_nome"></span>
+                                    <span class="text-[10px] text-slate-500 font-mono" x-text="view === 'saidas' ? n.cliente_cnpj : n.emitente_cnpj"></span>
                                     <span class="text-[9px] text-slate-600 font-mono" x-text="n.chave"></span>
                                 </div>
                             </td>
@@ -241,15 +261,15 @@
                             </td>
                             <td class="px-6 py-4 text-right">
                                 <div class="flex justify-end gap-2">
-                                    <a :href="'/nfe/danfe/' + n.id + '/' + (view === 'recebidas' ? 'recebida' : 'emitida')" target="_blank" 
+                                    <a :href="'/nfe/danfe/' + n.id + '/' + (view === 'entradas' ? 'recebida' : 'emitida')" target="_blank" 
                                        class="w-8 h-8 rounded-lg bg-indigo-600/10 text-indigo-400 flex items-center justify-center hover:bg-indigo-600 hover:text-white transition-all shadow-sm" title="DANFE A4">
                                         <i class="fas fa-print text-xs"></i>
                                     </a>
-                                    <a :href="'/nfe/danfe-simplificada/' + n.id + '/' + (view === 'recebidas' ? 'recebida' : 'emitida')" target="_blank" 
+                                    <a :href="'/nfe/danfe-simplificada/' + n.id + '/' + (view === 'entradas' ? 'recebida' : 'emitida')" target="_blank" 
                                        class="w-8 h-8 rounded-lg bg-blue-600/10 text-blue-400 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all shadow-sm" title="DANFE Simplificada">
                                         <i class="fas fa-receipt text-xs"></i>
                                     </a>
-                                    <a :href="'/nfe/download-xml/' + n.id + '/' + (view === 'recebidas' ? 'recebida' : 'emitida')" 
+                                    <a :href="'/nfe/download-xml/' + n.id + '/' + (view === 'entradas' ? 'recebida' : 'emitida')" 
                                        class="w-8 h-8 rounded-lg bg-amber-600/10 text-amber-400 flex items-center justify-center hover:bg-amber-600 hover:text-white transition-all shadow-sm" title="Baixar XML">
                                         <i class="fas fa-file-code text-xs"></i>
                                     </a>
@@ -287,6 +307,117 @@
             </button>
         </div>
     </div>
+
+    <!-- Import Modals (inside x-data scope) -->
+    <!-- Meli Import Modal -->
+    <div x-show="showImportMeli" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md" @click.stop>
+            <div class="flex items-center justify-between mb-6">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-rose-500/20 flex items-center justify-center">
+                        <i class="fab fa-mercadolivre text-rose-400"></i>
+                    </div>
+                    <h3 class="font-bold text-white uppercase italic">Importar Mercado Livre</h3>
+                </div>
+                <button @click="showImportMeli = false" class="text-slate-400 hover:text-white transition-colors">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-[10px] font-black text-slate-500 uppercase italic mb-2">Data Inicial</label>
+                    <input type="date" x-model="meliDataInicio" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-black italic focus:ring-rose-500 outline-none transition-all">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-black text-slate-500 uppercase italic mb-2">Data Final</label>
+                    <input type="date" x-model="meliDataFim" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-black italic focus:ring-rose-500 outline-none transition-all">
+                </div>
+                <p class="text-[10px] text-slate-500 font-bold italic underline decoration-rose-500/30">As notas serão processadas em background. Acompanhe na aba de Tarefas.</p>
+                <button @click="importFromMeli()" :disabled="importing"
+                        class="w-full py-4 bg-rose-600 hover:bg-rose-500 text-white font-black italic uppercase rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 transition-all shadow-lg shadow-rose-900/20">
+                    <i x-show="importing" class="fas fa-spinner fa-spin"></i>
+                    <span x-show="!importing"><i class="fas fa-download mr-2"></i> Iniciar Importação</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bling Import Modal -->
+    <div x-show="showImportBling" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md" @click.stop>
+            <div class="flex items-center justify-between mb-6">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-orange-500/20 flex items-center justify-center">
+                        <i class="fas fa-box text-orange-400"></i>
+                    </div>
+                    <h3 class="font-bold text-white uppercase italic">Importar do Bling</h3>
+                </div>
+                <button @click="showImportBling = false" class="text-slate-400 hover:text-white transition-colors">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-[10px] font-black text-slate-500 uppercase italic mb-2">Data Inicial</label>
+                    <input type="date" x-model="blingDataInicio" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-black italic focus:ring-orange-500 outline-none transition-all">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-black text-slate-500 uppercase italic mb-2">Data Final</label>
+                    <input type="date" x-model="blingDataFim" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-black italic focus:ring-orange-500 outline-none transition-all">
+                </div>
+                <p class="text-[10px] text-slate-500 font-bold italic underline decoration-orange-500/30">A importação trará as NF-es emitidas e autorizadas no Bling. Acompanhe em Tarefas.</p>
+                <button @click="importFromBling()" :disabled="importing"
+                        class="w-full py-4 bg-orange-600 hover:bg-orange-500 text-white font-black italic uppercase rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 transition-all shadow-lg shadow-orange-900/20">
+                    <i x-show="importing" class="fas fa-spinner fa-spin"></i>
+                    <span x-show="!importing"><i class="fas fa-download mr-2"></i> Iniciar Importação</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- XML Import Modal -->
+    <div x-show="showImportXml" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md" @click.stop>
+            <div class="flex items-center justify-between mb-6">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center">
+                        <i class="fas fa-file-code text-indigo-400"></i>
+                    </div>
+                    <h3 class="font-bold text-white">Importar XML</h3>
+                </div>
+                <button @click="showImportXml = false" class="text-slate-400 hover:text-white">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <label class="border-2 border-dashed border-slate-600 rounded-xl p-8 flex flex-col items-center cursor-pointer hover:border-indigo-500 transition">
+                <i class="fas fa-cloud-upload-alt text-3xl text-slate-500 mb-2"></i>
+                <span class="text-sm text-slate-400">Clique para selecionar arquivo XML</span>
+                <input type="file" accept=".xml" @change="importXml($event)" class="hidden">
+            </label>
+        </div>
+    </div>
+
+    <!-- ZIP Import Modal -->
+    <div x-show="showImportZip" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md" @click.stop>
+            <div class="flex items-center justify-between mb-6">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                        <i class="fas fa-file-archive text-amber-400"></i>
+                    </div>
+                    <h3 class="font-bold text-white">Importar ZIP</h3>
+                </div>
+                <button @click="showImportZip = false" class="text-slate-400 hover:text-white">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <label class="border-2 border-dashed border-slate-600 rounded-xl p-8 flex flex-col items-center cursor-pointer hover:border-indigo-500 transition">
+                <i class="fas fa-cloud-upload-alt text-3xl text-slate-500 mb-2"></i>
+                <span class="text-sm text-slate-400">Clique para selecionar arquivo ZIP</span>
+                <input type="file" accept=".zip" @change="importZip($event)" class="hidden">
+            </label>
+        </div>
+    </div>
 </div>
 @endsection
 
@@ -294,7 +425,7 @@
 <script>
 function fiscalPage() {
     return {
-            view: 'recebidas',
+            view: 'entradas',
             filtroSituacao: '',
             filtersOpen: false,
             associationFilter: '',
@@ -328,18 +459,22 @@ function fiscalPage() {
         from: 0,
         to: 0,
         empresaId: 6,
+        // Server-side aggregates
+        totalValue: 0,
+        canceladasCount: 0,
         
         get totalSelecionadas() {
-            return this.nfe.filter(n => this.selected.includes(n.id)).reduce((sum, n) => sum + parseFloat(n.valor_total || 0), 0);
+            return this.nfe.filter(n => this.selected.includes(String(n.id))).reduce((sum, n) => sum + parseFloat(n.valor_total || 0), 0);
         },
         
         toggleAll(checked) {
             if (checked) {
-                this.selected = this.nfe.map(n => n.id);
+                this.selected = this.nfe.map(n => String(n.id));
             } else {
                 this.selected = [];
             }
         },
+
         
         changePage(page) {
             if (page >= 1 && page <= this.lastPage) {
@@ -353,7 +488,7 @@ function fiscalPage() {
             const savedEmpresa = localStorage.getItem('empresa_id');
             this.empresaId = savedEmpresa ? parseInt(savedEmpresa) : 6;
             
-            // Iniciar com data inicial -60 dias e data final hoje (dados históricos)
+            // Iniciar com data padrão -60 dias e data final hoje
             const hoje = new Date();
             const sessentaDiasAtras = new Date();
             sessentaDiasAtras.setDate(hoje.getDate() - 60);
@@ -361,7 +496,10 @@ function fiscalPage() {
             this.dataFim = hoje.toISOString().split('T')[0];
             this.dataInicio = sessentaDiasAtras.toISOString().split('T')[0];
             
-            await this.loadNfe();
+            // Restaurar filtros da URL (sobrescreve os defaults acima se existirem)
+            this.initFromUrl();
+            
+            await this.loadNfe(false);
             
             // Listen for empresa changes from the layout
             window.addEventListener('empresa-changed', (e) => {
@@ -369,10 +507,55 @@ function fiscalPage() {
                 localStorage.setItem('empresa_id', this.empresaId);
                 this.loadNfe();
             });
+
+            // Listen for browser back/forward
+            window.addEventListener('popstate', () => {
+                this.initFromUrl();
+                this.loadNfe(false);
+            });
+        },
+
+        initFromUrl() {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('search')) this.search = urlParams.get('search');
+            if (urlParams.has('view')) {
+                const v = urlParams.get('view');
+                if (v === 'recebidas') this.view = 'entradas';
+                else if (v === 'emitidas') this.view = 'saidas';
+                else this.view = v;
+            }
+            if (urlParams.has('situacao')) this.filtroSituacao = urlParams.get('situacao');
+            if (urlParams.has('association')) this.associationFilter = urlParams.get('association');
+            if (urlParams.has('data_inicio')) this.dataInicio = urlParams.get('data_inicio');
+            if (urlParams.has('data_fim')) this.dataFim = urlParams.get('data_fim');
+            if (urlParams.has('page')) this.currentPage = parseInt(urlParams.get('page'));
+        },
+
+        updateUrlParams() {
+            const params = new URLSearchParams();
+            if (this.search) params.set('search', this.search);
+            if (this.view && this.view !== 'entradas') params.set('view', this.view);
+            if (this.filtroSituacao) params.set('situacao', this.filtroSituacao);
+            if (this.associationFilter) params.set('association', this.associationFilter);
+            if (this.dataInicio) params.set('data_inicio', this.dataInicio);
+            if (this.dataFim) params.set('data_fim', this.dataFim);
+            if (this.currentPage > 1) params.set('page', this.currentPage);
+
+            const queryString = params.toString();
+            const currentQuery = window.location.search.replace(/^\?/, '');
+
+            if (queryString !== currentQuery) {
+                const newUrl = window.location.pathname + (queryString ? '?' + queryString : '');
+                history.pushState(null, '', newUrl);
+            }
         },
         
-        async loadNfe() {
+        async loadNfe(resetPage = true) {
+            if (resetPage) {
+                this.currentPage = 1;
+            }
             this.loading = true;
+            this.updateUrlParams();
             try {
                 const empresaId = this.empresaId || localStorage.getItem('empresa_id') || 6;
                 const params = new URLSearchParams({
@@ -382,6 +565,7 @@ function fiscalPage() {
                     data_inicio: this.dataInicio,
                     data_fim: this.dataFim,
                     search: this.search,
+                    association: this.associationFilter,
                     page: this.currentPage
                 });
                 
@@ -394,6 +578,12 @@ function fiscalPage() {
                     this.total = data.total || 0;
                     this.from = data.from || 0;
                     this.to = data.to || 0;
+
+                    // Server-side aggregates
+                    if (data.aggregates) {
+                        this.totalValue = data.aggregates.total_value || 0;
+                        this.canceladasCount = data.aggregates.canceladas_count || 0;
+                    }
                     
                     // Atualizar stats da empresa se vierem na resposta ou buscar separado
                     if (data.empresa_stats) {
@@ -408,6 +598,7 @@ function fiscalPage() {
             }
             this.loading = false;
         },
+
 
         updateSefazTimer() {
             if (!this.empresaStats.last_sefaz_at || this.empresaStats.last_sefaz_at === 'Nunca') {
@@ -721,17 +912,7 @@ function fiscalPage() {
             this.importing = false;
         },
         
-        get totalValue() {
-            return this.nfe.reduce((sum, n) => sum + parseFloat(n.valor_total || 0), 0);
-        },
-        
-        get totalIcms() {
-            return this.nfe.reduce((sum, n) => sum + parseFloat(n.icms_valor || 0), 0);
-        },
-        
-        get canceladasCount() {
-            return this.nfe.filter(n => n.status_nfe?.toLowerCase() === 'cancelada').length;
-        },
+
         
         getStatusClass(status) {
             const s = status?.toLowerCase();
@@ -767,7 +948,7 @@ function fiscalPage() {
                     },
                     body: JSON.stringify({
                         ids: this.selected,
-                        type: this.view === 'recebidas' ? 'recebida' : 'emitida'
+                        type: this.view === 'entradas' ? 'recebida' : 'emitida'
                     })
                 });
                 
@@ -897,122 +1078,4 @@ function fiscalPage() {
 }
 </script>
 
-<!-- Import Modals -->
-<!-- Meli Import Modal -->
-<div x-show="showImportMeli" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md" @click.stop>
-        <div class="flex items-center justify-between mb-6">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-rose-500/20 flex items-center justify-center">
-                    <i class="fab fa-mercadolivre text-rose-400"></i>
-                </div>
-                <h3 class="font-bold text-white uppercase italic">Importar Mercado Livre</h3>
-            </div>
-            <button @click="showImportMeli = false" class="text-slate-400 hover:text-white transition-colors">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-        
-        <div class="space-y-4">
-            <div>
-                <label class="block text-[10px] font-black text-slate-500 uppercase italic mb-2">Data Inicial</label>
-                <input type="date" x-model="meliDataInicio" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-black italic focus:ring-rose-500 outline-none transition-all">
-            </div>
-            <div>
-                <label class="block text-[10px] font-black text-slate-500 uppercase italic mb-2">Data Final</label>
-                <input type="date" x-model="meliDataFim" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-black italic focus:ring-rose-500 outline-none transition-all">
-            </div>
-            
-            <p class="text-[10px] text-slate-500 font-bold italic underline decoration-rose-500/30">As notas serão processadas em background. Acompanhe na aba de Tarefas.</p>
-            
-            <button @click="importFromMeli()" :disabled="importing"
-                    class="w-full py-4 bg-rose-600 hover:bg-rose-500 text-white font-black italic uppercase rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 transition-all shadow-lg shadow-rose-900/20">
-                <i x-show="importing" class="fas fa-spinner fa-spin"></i>
-                <span x-show="!importing"><i class="fas fa-download mr-2"></i> Iniciar Importação</span>
-            </button>
-        </div>
-    </div>
-</div>
-
-<!-- Bling Import Modal -->
-<div x-show="showImportBling" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md" @click.stop>
-        <div class="flex items-center justify-between mb-6">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-orange-500/20 flex items-center justify-center">
-                    <i class="fas fa-box text-orange-400"></i>
-                </div>
-                <h3 class="font-bold text-white uppercase italic">Importar do Bling</h3>
-            </div>
-            <button @click="showImportBling = false" class="text-slate-400 hover:text-white transition-colors">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-        
-        <div class="space-y-4">
-            <div>
-                <label class="block text-[10px] font-black text-slate-500 uppercase italic mb-2">Data Inicial</label>
-                <input type="date" x-model="blingDataInicio" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-black italic focus:ring-orange-500 outline-none transition-all">
-            </div>
-            <div>
-                <label class="block text-[10px] font-black text-slate-500 uppercase italic mb-2">Data Final</label>
-                <input type="date" x-model="blingDataFim" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-black italic focus:ring-orange-500 outline-none transition-all">
-            </div>
-            
-            <p class="text-[10px] text-slate-500 font-bold italic underline decoration-orange-500/30">A importação trará as NF-es emitidas e autorizadas no Bling. Acompanhe em Tarefas.</p>
-            
-            <button @click="importFromBling()" :disabled="importing"
-                    class="w-full py-4 bg-orange-600 hover:bg-orange-500 text-white font-black italic uppercase rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 transition-all shadow-lg shadow-orange-900/20">
-                <i x-show="importing" class="fas fa-spinner fa-spin"></i>
-                <span x-show="!importing"><i class="fas fa-download mr-2"></i> Iniciar Importação</span>
-            </button>
-        </div>
-    </div>
-</div>
-
-<!-- XML Import Modal -->
-<div x-show="showImportXml" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md" @click.stop>
-        <div class="flex items-center justify-between mb-6">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center">
-                    <i class="fas fa-file-code text-indigo-400"></i>
-                </div>
-                <h3 class="font-bold text-white">Importar XML</h3>
-            </div>
-            <button @click="showImportXml = false" class="text-slate-400 hover:text-white">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-        
-        <label class="border-2 border-dashed border-slate-600 rounded-xl p-8 flex flex-col items-center cursor-pointer hover:border-indigo-500 transition">
-            <i class="fas fa-cloud-upload-alt text-3xl text-slate-500 mb-2"></i>
-            <span class="text-sm text-slate-400">Clique para selecionar arquivo XML</span>
-            <input type="file" accept=".xml" @change="importXml($event)" class="hidden">
-        </label>
-    </div>
-</div>
-
-<!-- ZIP Import Modal -->
-<div x-show="showImportZip" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md" @click.stop>
-        <div class="flex items-center justify-between mb-6">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
-                    <i class="fas fa-file-archive text-amber-400"></i>
-                </div>
-                <h3 class="font-bold text-white">Importar ZIP</h3>
-            </div>
-            <button @click="showImportZip = false" class="text-slate-400 hover:text-white">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-        
-        <label class="border-2 border-dashed border-slate-600 rounded-xl p-8 flex flex-col items-center cursor-pointer hover:border-indigo-500 transition">
-            <i class="fas fa-cloud-upload-alt text-3xl text-slate-500 mb-2"></i>
-            <span class="text-sm text-slate-400">Clique para selecionar arquivo ZIP</span>
-            <input type="file" accept=".zip" @change="importZip($event)" class="hidden">
-        </label>
-    </div>
-</div>
 @endsection

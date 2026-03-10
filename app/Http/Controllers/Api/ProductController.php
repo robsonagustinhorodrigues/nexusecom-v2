@@ -423,9 +423,17 @@ class ProductController extends Controller
         $empresa = \App\Models\Empresa::find($empresaId);
         $grupoId = $empresa?->grupo_id;
 
+        $query = $request->q;
+
         $products = Product::where('grupo_id', $grupoId)
-            ->where('nome', 'ilike', '%'.$request->q.'%')
-            ->orWhere('sku', 'ilike', '%'.$request->q.'%')
+            ->where(function ($q) use ($query) {
+                $searchTerm = '%'.$query.'%';
+                $q->where('nome', 'ilike', $searchTerm)
+                    ->orWhere('sku', 'ilike', $searchTerm)
+                    ->orWhereHas('skus', function ($sq) use ($searchTerm) {
+                        $sq->where('sku', 'ilike', $searchTerm);
+                    });
+            })
             ->limit(10)
             ->get(['id', 'nome', 'sku', 'preco_venda', 'estoque']);
 

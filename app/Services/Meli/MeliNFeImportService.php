@@ -4,12 +4,20 @@ namespace App\Services\Meli;
 
 use App\Jobs\ImportarNFeMeliJob;
 use App\Models\Empresa;
+use App\Services\FiscalService;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use ZipArchive;
 
 class MeliNFeImportService
 {
+    protected $fiscalService;
+
+    public function __construct(FiscalService $fiscalService)
+    {
+        $this->fiscalService = $fiscalService;
+    }
+
     /**
      * Importa notas fiscais do Mercado Livre por período
      */
@@ -86,8 +94,8 @@ class MeliNFeImportService
                 $xmlContent = $zip->getFromIndex($i);
 
                 if ($xmlContent) {
-                    // 5. Despacha para a Fila (QUEUE)
-                    ImportarNFeMeliJob::dispatch($empresa, $xmlContent);
+                    // Importa diretamente (já deve estar rodando em background via Job)
+                    $this->fiscalService->importXml($xmlContent, $empresa->id, $fileNameXml, 'recebidas');
                     $processed++;
                 }
             }

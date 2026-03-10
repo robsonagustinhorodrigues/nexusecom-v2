@@ -171,11 +171,8 @@ class BlingController extends Controller
         }
 
         try {
-            return response()->json([
-                'success' => true,
-                'message' => 'Conexão OK!',
-                'data' => ['status' => 'connected'],
-            ]);
+            $result = $blingService->testConnection();
+            return response()->json($result);
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => 'Erro: '.$e->getMessage()]);
         }

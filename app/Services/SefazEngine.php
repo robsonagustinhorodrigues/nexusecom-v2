@@ -18,21 +18,32 @@ class SefazEngine
      * Se o CNPJ emitente = CNPJ da empresa → SAÍDA (nfe_emitida)
      * Caso contrário → ENTRADA (nfe_recebida)
      */
-    private function verificarTipoNfe(string $chave, Empresa $empresa): string
+    private function verificarTipoNfe(string $chave, Empresa $empresa, ?int $tpNF = null, ?string $emitCnpj = null, ?string $destCnpj = null): string
     {
-        // Extrai CNPJ emitente da chave NFe
-        $cnpjEmitente = substr(preg_replace('/[^0-9]/', '', $chave), 6, 14);
-        $cnpjEmpresa = preg_replace('/[^0-9]/', '', $empresa->cnpj);
+        $cnpjEmpresa = ltrim(preg_replace('/[^0-9]/', '', $empresa->cnpj), '0');
         
-        // Remove zeros à esquerda para comparação
-        $cnpjEmitente = ltrim($cnpjEmitente, '0');
-        $cnpjEmpresa = ltrim($cnpjEmpresa, '0');
+        // Se temos o CNPJ do emitente explicitamente, usamos ele, senão extraímos da chave
+        $cnpjEmitente = ltrim(preg_replace('/[^0-9]/', '', $emitCnpj ?: substr(preg_replace('/[^0-9]/', '', $chave), 6, 14)), '0');
         
+        // Se o emitente é a própria empresa, é uma nota EMITIDA
         if (!empty($cnpjEmitente) && !empty($cnpjEmpresa) && $cnpjEmitente === $cnpjEmpresa) {
-            return 'emitida'; // É uma nota de SAÍDA
+            return 'emitida';
         }
         
-        return 'recebida'; // É uma nota de ENTRADA
+        // Se o destinatário é a empresa e o emitente é outro, é RECEBIDA
+        if ($destCnpj) {
+            $cnpjDest = ltrim(preg_replace('/[^0-9]/', '', $destCnpj), '0');
+            if ($cnpjDest === $cnpjEmpresa && $cnpjEmitente !== $cnpjEmpresa) {
+                return 'recebida';
+            }
+        }
+
+        // Fallback para tpNF: se não somos o emitente e o tipo é Entrada (0), é recebida
+        if ($tpNF === 0 && $cnpjEmitente !== $cnpjEmpresa) {
+            return 'recebida';
+        }
+        
+        return 'recebida';
     }
 
     /**
@@ -417,9 +428,10 @@ class SefazEngine
         $xNome = (string) $xml->xNome;
         $dEmi = (string) $xml->dhEmi ?: (string) $xml->dEmi;
         $vNF = (float) $xml->vNF;
+        $tpNF = isset($xml->tpNF) ? (int) $xml->tpNF : null;
 
         // Determina se é nota de entrada ou saída
-        $tipoNfe = $this->verificarTipoNfe($chNFe, $empresa);
+        $tipoNfe = $this->verificarTipoNfe($chNFe, $empresa, $tpNF, $cnpjEmit);
 
         if ($tipoNfe === 'emitida') {
             NfeEmitida::updateOrCreate(
@@ -456,9 +468,12 @@ class SefazEngine
 
         $infNFe = $xml->NFe->infNFe;
         $chNFe = preg_replace('/[^0-9]/', '', (string) $infNFe->attributes()->Id);
+        $emitCnpj = (string) ($infNFe->emit->CNPJ ?: $infNFe->emit->CPF);
+        $destCnpj = (string) ($infNFe->dest->CNPJ ?: $infNFe->dest->CPF);
+        $tpNF = (int) ($infNFe->ide->tpNF ?? 1);
 
         // Determina se é nota de entrada ou saída
-        $tipoNfe = $this->verificarTipoNfe($chNFe, $empresa);
+        $tipoNfe = $this->verificarTipoNfe($chNFe, $empresa, $tpNF, $emitCnpj, $destCnpj);
 
         $path = $tipoNfe === 'emitida' 
             ? 'nfes/emitidas/'.date('Y/m')."/{$chNFe}.xml"

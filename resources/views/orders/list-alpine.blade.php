@@ -411,7 +411,7 @@
                                 </div>
                                 <div class="flex justify-between items-center group" title="Tarifa do Marketplace">
                                     <div class="flex items-center gap-1.5 text-slate-400 group-hover:text-slate-300">
-                                        Tarifa ML
+                                        Tarifa
                                         <span class="text-[9px] bg-slate-800 border border-slate-700 px-1 py-px rounded font-mono" x-show="order.taxa_platform > 0" x-text="(Math.round((order.taxa_platform / (order.valor_produtos || 1)) * 100) + '%')"></span>
                                     </div>
                                     <span class="text-red-400 font-medium" x-text="'-' + formatMoney(order.taxa_platform)"></span>
@@ -880,6 +880,7 @@ function ordersPage() {
             this.syncStatus = 'Iniciando...';
             let totalImported = 0;
             let page = 0;
+            let nextToken = null;
             let hasMore = true;
 
             try {
@@ -902,7 +903,14 @@ function ordersPage() {
 
                 while (hasMore) {
                     this.syncStatus = `Pag. ${page + 1}...`;
-                    let url = `/api/orders/sync?empresa_id=${this.empresaId}&marketplace=${marketplace}&page=${page}`;
+                    let url = `/api/orders/sync?empresa_id=${this.empresaId}&marketplace=${marketplace}`;
+                    
+                    // Amazon uses next_token, Meli uses page offset
+                    if (marketplace === 'amazon' && nextToken) {
+                        url += `&next_token=${encodeURIComponent(nextToken)}`;
+                    } else {
+                        url += `&page=${page}`;
+                    }
                     
                     if (usePeriod) {
                         url += `&data_de=${this.dataDe}&data_ate=${this.dataAte}`;
@@ -928,7 +936,14 @@ function ordersPage() {
 
                     totalImported += (data.imported || 0);
                     hasMore = data.has_more;
-                    page = data.next_page;
+                    
+                    // Handle different pagination strategies
+                    if (marketplace === 'amazon') {
+                        nextToken = data.next_token || null;
+                        hasMore = !!nextToken;
+                    } else {
+                        page = data.next_page;
+                    }
 
                     // Pequena pausa para não atropelar o servidor
                     if (hasMore) await new Promise(r => setTimeout(r, 500));

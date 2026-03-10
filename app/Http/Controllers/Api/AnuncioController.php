@@ -196,14 +196,22 @@ class AnuncioController extends Controller
         $jsonData = is_array($anuncio->json_data) ? $anuncio->json_data : json_decode($anuncio->json_data, true) ?? [];
         $listingType = $jsonData['listing_type_id'] ?? 'gold_special';
 
-        $taxaPercent = match ($listingType) {
-            'gold_special' => 0.16,
-            'gold_pro' => 0.12,
-            'silver' => 0.11,
-            'bronze' => 0.10,
-            'free' => 0.12,
-            default => 0.12
-        };
+        $taxaPercent = 0.12; 
+
+        if ($anuncio->marketplace === 'mercadolivre') {
+            $taxaPercent = match ($listingType) {
+                'gold_special' => 0.16,
+                'gold_pro' => 0.12,
+                'silver' => 0.11,
+                'bronze' => 0.10,
+                'free' => 0.12,
+                default => 0.12
+            };
+        } elseif ($anuncio->marketplace === 'amazon') {
+            // Amazon standard commission for most home/furniture products is 15-16%
+            // If the user specified 16% in their request, let's use it as a more realistic default for Amazon
+            $taxaPercent = 0.16; 
+        }
 
         $frete = floatval($anuncio->frete_custo_seller ?? 0);
         $freteGratis = $frete <= 0;
@@ -353,8 +361,12 @@ class AnuncioController extends Controller
             ->withCount('variations')
             ->where('tipo', '!=', 'variacao') // Excluir produtos pais (tipo variacao = pai)
             ->where(function ($q) use ($query) {
-                $q->whereRaw('LOWER(nome) LIKE ?', ['%'.strtolower($query).'%'])
-                    ->orWhereRaw('LOWER(sku) LIKE ?', ['%'.strtolower($query).'%']);
+                $searchTerm = '%'.$query.'%';
+                $q->where('nome', 'ilike', $searchTerm)
+                    ->orWhere('sku', 'ilike', $searchTerm)
+                    ->orWhereHas('skus', function ($sq) use ($searchTerm) {
+                        $sq->where('sku', 'ilike', $searchTerm);
+                    });
             })
             ->limit(20)
             ->get()

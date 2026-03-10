@@ -44,6 +44,38 @@ class MeliIntegrationService
         return $integracao && ! empty($integracao->access_token);
     }
 
+    public function testConnection(): array
+    {
+        $token = $this->getAccessToken();
+
+        if (! $token) {
+            return ['success' => false, 'message' => 'Meli não conectado'];
+        }
+
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer '.$token,
+            ])->get("https://api.mercadolibre.com/users/me");
+
+            if ($response->successful()) {
+                $data = $response->json();
+                return [
+                    'success' => true,
+                    'message' => 'Conexão OK! Usuário: ' . ($data['nickname'] ?? 'N/A'),
+                    'data' => $data
+                ];
+            }
+
+            return [
+                'success' => false,
+                'message' => 'Erro na API: ' . ($response->json()['message'] ?? $response->status()),
+            ];
+        } catch (\Exception $e) {
+            Log::error('Meli testConnection exception: '.$e->getMessage());
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
+    }
+
     public function updateNome(string $nome): bool
     {
         $integracao = $this->getIntegracao();
@@ -105,6 +137,14 @@ class MeliIntegrationService
         $valorImposto = 0;
         if (! empty($orderData['taxes']) && is_array($orderData['taxes'])) {
             $valorImposto = collect($orderData['taxes'])->sum('amount');
+        }
+
+        // Se o pedido está cancelado e não houve pagamento aprovado, zeramos os valores para o lucro
+        if (($orderData['status'] ?? '') === 'cancelled') {
+            $valorTotal = 0;
+            $valorFrete = 0; // O frete de devolução/cancelamento pode ser tratado separadamente se necessário
+            $taxaPlatform = 0;
+            $valorImposto = 0;
         }
 
         $valorLiquido = $valorTotal - $taxaPlatform - $taxaPagamento - $valorFrete - $valorImposto;
@@ -831,11 +871,6 @@ class MeliIntegrationService
 
         $newStatus = $statusMap[$orderData['status']] ?? $orderData['status'];
 
-        // Verificar se status mudou
-        if ($pedido->status !== $newStatus) {
-            Log::info("Pedido {$pedido->pedido_id} status alterado: {$pedido->status} -> {$newStatus}");
-        }
-
         $existingJsonData = is_string($pedido->json_data) ? json_decode($pedido->json_data, true) : ($pedido->json_data ?? []);
         $mergedJsonData = $existingJsonData;
 
@@ -863,6 +898,15 @@ class MeliIntegrationService
 
         // Recalcular financeiros do JSON mesclado
         $financials = $this->extractFinancials($mergedJsonData);
+
+        if ($pedido->status !== $newStatus) {
+            Log::info("Pedido {$pedido->pedido_id} status alterado: {$pedido->status} -> {$newStatus}");
+
+            // Se mudou para cancelado e não tinha sido enviado, repor estoque
+            if ($newStatus === 'cancelado' && ! in_array($pedido->status, ['enviado', 'entregue', 'shipped', 'delivered'])) {
+                $this->reporEstoqueAutomatico($pedido, $mergedJsonData);
+            }
+        }
 
         $pedido->update([
             'status' => $newStatus,
@@ -1546,6 +1590,81 @@ class MeliIntegrationService
 
         } catch (\Exception $e) {
             Log::error('Estoque: Erro ao fazer baixa automática: '.$e->getMessage());
+        }
+    }
+
+    /**
+     * Reposição automática de estoque para pedidos cancelados
+     */
+    protected function reporEstoqueAutomatico(MarketplacePedido $pedido, array $orderData): void
+    {
+        try {
+            // Obter tipo de logística do pedido
+            $shipping = $orderData['shipping'] ?? [];
+            $logisticType = $shipping['logistic_type'] ?? null;
+
+            // Determinar depósito baseado na logística
+            $depositoId = $this->getDepositoPorLogistica($logisticType, $pedido->empresa_id);
+
+            if (! $depositoId) {
+                Log::warning("Estoque (Reposição): Depósito não encontrado para logística: {$logisticType}");
+
+                return;
+            }
+
+            // Obter itens do pedido
+            $orderItems = $orderData['order_items'] ?? [];
+            if (empty($orderItems)) {
+                return;
+            }
+
+            $estoqueService = app(\App\Services\EstoqueMovimentacaoService::class);
+            $reposicoes = 0;
+
+            foreach ($orderItems as $item) {
+                $itemId = $item['item']['id'] ?? null;
+                if (! $itemId) {
+                    continue;
+                }
+
+                $anuncio = \App\Models\MarketplaceAnuncio::where('external_id', $itemId)
+                    ->where('empresa_id', $pedido->empresa_id)
+                    ->first();
+
+                if (! $anuncio) {
+                    continue;
+                }
+
+                $skuId = null;
+                if ($anuncio->produto_id) {
+                    $sku = \App\Models\ProductSku::where('product_id', $anuncio->produto_id)->first();
+                    $skuId = $sku?->id;
+                }
+
+                if (! $skuId) {
+                    continue;
+                }
+
+                $quantidade = intval($item['quantity'] ?? 1);
+
+                // Tentar repor
+                $result = $estoqueService->reporEstoquePorCancelamento(
+                    $pedido,
+                    $skuId,
+                    $quantidade,
+                    $depositoId
+                );
+
+                if ($result) {
+                    $reposicoes++;
+                    Log::info("Estoque (Reposição): Reposto {$quantidade} do SKU {$skuId} no depósito {$depositoId}");
+                }
+            }
+
+            Log::info("Estoque (Reposição): Pedido {$pedido->pedido_id} - {$reposicoes} reposições realizadas");
+
+        } catch (\Exception $e) {
+            Log::error('Estoque (Reposição): Erro ao repor estoque automaticamente: '.$e->getMessage());
         }
     }
 

@@ -12,7 +12,8 @@ class NfeController extends Controller
     public function index(Request $request)
     {
         $empresaId = $request->get('empresa', $request->get('empresa_id', session('empresa_id', 6)));
-        $view = $request->get('tipo', $request->get('view', 'recebidas'));
+        $viewArg = $request->get('tipo', $request->get('view', 'entradas'));
+        $view = ($viewArg === 'emitidas' || $viewArg === 'saidas') ? 'emitidas' : 'recebidas';
 
         if ($view === 'emitidas') {
             $query = NfeEmitida::where('empresa_id', $empresaId);
@@ -22,9 +23,15 @@ class NfeController extends Controller
 
         // Filters
         if ($request->search) {
-            $query->where(function ($q) use ($request) {
+            $query->where(function ($q) use ($request, $view) {
                 $q->where('chave', 'like', "%{$request->search}%")
                     ->orWhere('numero', 'like', "%{$request->search}%");
+                
+                if ($view === 'emitidas') {
+                    $q->orWhere('cliente_nome', 'like', "%{$request->search}%");
+                } else {
+                    $q->orWhere('emitente_nome', 'like', "%{$request->search}%");
+                }
             });
         }
 
@@ -59,24 +66,37 @@ class NfeController extends Controller
             $query->whereDate('data_emissao', '<=', $request->data_ate);
         }
 
+        // Compute aggregates from the full query before pagination
+        $aggregates = (clone $query)->selectRaw('COALESCE(SUM(valor_total), 0) as total_value, COUNT(*) as total_count')->first();
+        $canceladasCount = (clone $query)->where('status_nfe', 'cancelada')->count();
+
         $nfes = $query->orderBy('data_emissao', 'desc')->paginate($request->per_page ?? 100);
 
         $empresa = \App\Models\Empresa::find($empresaId);
+        $empresaNome = $empresa ? $empresa->nome : 'Empresa';
+        $empresaCnpj = $empresa ? $empresa->cnpj : '';
 
         return response()->json([
-            'data' => $nfes->map(function ($nfe) {
+            'aggregates' => [
+                'total_value' => floatval($aggregates->total_value ?? 0),
+                'total_count' => intval($aggregates->total_count ?? 0),
+                'canceladas_count' => $canceladasCount,
+            ],
+            'data' => $nfes->map(function ($nfe) use ($view, $empresaNome, $empresaCnpj) {
                 return [
                     'id' => $nfe->id,
                     'chave' => $nfe->chave,
                     'numero' => $nfe->numero,
                     'serie' => $nfe->serie,
-                    'emitente_nome' => $nfe->emitente_nome ?? $nfe->cliente_nome,
-                    'emitente_cnpj' => $nfe->emitente_cnpj ?? $nfe->cliente_cnpj,
-                    'cliente_nome' => $nfe->cliente_nome,
-                    'cliente_cnpj' => $nfe->cliente_cnpj,
+                    // Se é emitida, o emitente somos nós. Se é recebida, o emitente é o fornecedor.
+                    'emitente_nome' => $view === 'emitidas' ? $empresaNome : ($nfe->emitente_nome ?? 'N/D'),
+                    'emitente_cnpj' => $view === 'emitidas' ? $empresaCnpj : ($nfe->emitente_cnpj ?? 'N/D'),
+                    // Se é emitida, o cliente é o destinatário. Se é recebida, o cliente somos nós.
+                    'cliente_nome' => $view === 'emitidas' ? ($nfe->cliente_nome ?? 'N/D') : $empresaNome,
+                    'cliente_cnpj' => $view === 'emitidas' ? ($nfe->cliente_cnpj ?? 'N/D') : $empresaCnpj,
                     'valor_total' => floatval($nfe->valor_total),
                     'data_emissao' => $nfe->data_emissao,
-                    'data_recebimento' => $nfe->data_recebimento,
+                    'data_recebimento' => $nfe->data_recebimento ?? null,
                     'status_nfe' => $nfe->status_nfe,
                     'status_manifestacao' => $nfe->status_manifestacao ?? null,
                     'xml_path' => $nfe->xml_path,

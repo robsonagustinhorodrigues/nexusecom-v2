@@ -16,23 +16,36 @@ class FiscalService
     /**
      * Determina se a NF-e é de entrada ou saída baseado no CNPJ.
      */
-    private function verificarTipoNfe(string $chave, int $empresaId): string
+    private function verificarTipoNfe(string $chave, int $empresaId, ?int $tpNF = null, ?string $emitCnpj = null, ?string $destCnpj = null): string
     {
         $empresa = \App\Models\Empresa::find($empresaId);
         if (!$empresa || empty($empresa->cnpj)) {
             return 'recebida'; // Default to received if no company found
         }
         
-        // Extrai CNPJ emitente da chave NFe
-        $cnpjEmitente = substr(preg_replace('/[^0-9]/', '', $chave), 6, 14);
-        $cnpjEmpresa = preg_replace('/[^0-9]/', '', $empresa->cnpj);
+        $cnpjEmpresa = ltrim(preg_replace('/[^0-9]/', '', $empresa->cnpj), '0');
         
-        // Remove zeros à esquerda para comparação
-        $cnpjEmitente = ltrim($cnpjEmitente, '0');
-        $cnpjEmpresa = ltrim($cnpjEmpresa, '0');
+        // Se temos o CNPJ do emitente explicitamente, usamos ele, senão extraímos da chave
+        $cnpjEmitente = ltrim(preg_replace('/[^0-9]/', '', $emitCnpj ?: substr(preg_replace('/[^0-9]/', '', $chave), 6, 14)), '0');
         
+        // Se o emitente é a própria empresa, é uma nota EMITIDA (Saída ou Entrada Própria)
         if (!empty($cnpjEmitente) && !empty($cnpjEmpresa) && $cnpjEmitente === $cnpjEmpresa) {
+            // Nota: Se a empresa tiver o mesmo CNPJ que um fornecedor (caso Meli), 
+            // ainda assim o SEFAZ trata a empresa como emissora se o CNPJ emitente for este.
             return 'emitida';
+        }
+        
+        // Se o destinatário é a empresa e o emitente é outro, é RECEBIDA
+        if ($destCnpj) {
+            $cnpjDest = ltrim(preg_replace('/[^0-9]/', '', $destCnpj), '0');
+            if ($cnpjDest === $cnpjEmpresa && $cnpjEmitente !== $cnpjEmpresa) {
+                return 'recebida';
+            }
+        }
+
+        // Fallback para tpNF
+        if ($tpNF === 0 && $cnpjEmitente !== $cnpjEmpresa) {
+            return 'recebida';
         }
         
         return 'recebida';
@@ -78,7 +91,7 @@ class FiscalService
      *
      * @throws \Exception
      */
-    public function importXml($content, $empresaId, ?string $nomeArquivo = null)
+    public function importXml($content, $empresaId, ?string $nomeArquivo = null, ?string $forcedTipo = null)
     {
         try {
             $nomeArquivo = $nomeArquivo ?? 'arquivo_desconhecido.xml';
@@ -216,7 +229,8 @@ class FiscalService
             $jaDevolvida = $jaFoiDevolvida !== null;
 
             // Determina se é nota de entrada ou saída
-            $tipoNfe = $this->verificarTipoNfe($chave, $empresaId);
+            $tpNF = (int) ($infNFe->ide->tpNF ?? 1);
+            $tipoNfe = $forcedTipo ?: $this->verificarTipoNfe($chave, $empresaId, $tpNF, $emitenteCnpj, $destinatarioCnpj);
 
             // Salva ou Atualiza
             if ($tipoNfe === 'emitida') {

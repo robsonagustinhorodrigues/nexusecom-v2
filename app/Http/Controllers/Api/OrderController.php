@@ -335,10 +335,13 @@ class OrderController extends Controller
         
         // Cache service instances for efficiency
         $meliService = new MeliIntegrationService($empresaId);
+        $amazonService = new AmazonSpApiService($empresaId);
 
         foreach ($orders as $order) {
             if ($order->marketplace === 'mercadolivre') {
                 $meliService->recalculateOrderFinancials($order);
+            } elseif ($order->marketplace === 'amazon') {
+                $amazonService->refreshOrder($order->id);
             } else {
                 $this->profitService->persistFinancialFields($order, $empresa);
             }
@@ -361,19 +364,30 @@ class OrderController extends Controller
     {
         $empresaId = (int) $request->get('empresa_id', session('empresa_id', 6));
 
-        $integrations = Integracao::where('empresa_id', $empresaId)
+        $allIntegrations = Integracao::where('empresa_id', $empresaId)
             ->where('ativo', true)
-            ->where('marketplace', 'mercadolivre')
-            ->get(['id', 'marketplace', 'nome_conta', 'external_user_id'])
+            ->whereIn('marketplace', ['mercadolivre', 'amazon'])
+            ->get(['id', 'marketplace', 'nome_conta', 'external_user_id']);
+
+        $meliIntegrations = $allIntegrations->where('marketplace', 'mercadolivre')
             ->map(fn ($i) => [
                 'id' => $i->id,
                 'marketplace' => $i->marketplace,
                 'nome_conta' => $i->nome_conta,
                 'user_id' => $i->external_user_id,
-            ]);
+            ])->values();
+
+        $amazonIntegrations = $allIntegrations->where('marketplace', 'amazon')
+            ->map(fn ($i) => [
+                'id' => $i->id,
+                'marketplace' => $i->marketplace,
+                'nome_conta' => $i->nome_conta,
+                'user_id' => $i->external_user_id,
+            ])->values();
 
         return response()->json([
-            'mercadolivre' => $integrations->values(),
+            'mercadolivre' => $meliIntegrations,
+            'amazon' => $amazonIntegrations,
         ]);
     }
 
@@ -454,15 +468,18 @@ class OrderController extends Controller
                 ], 404);
             }
 
-            if ($pedido->marketplace !== 'mercadolivre') {
+            if ($pedido->marketplace === 'mercadolivre') {
+                $service = new MeliIntegrationService($empresaId);
+                $result = $service->refreshOrder($id);
+            } elseif ($pedido->marketplace === 'amazon') {
+                $service = new AmazonSpApiService($empresaId);
+                $result = $service->refreshOrder($id);
+            } else {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Atualização disponível apenas para Mercado Livre',
+                    'message' => 'Atualização disponível apenas para Mercado Livre e Amazon',
                 ], 400);
             }
-
-            $service = new MeliIntegrationService($empresaId);
-            $result = $service->refreshOrder($id);
 
             return response()->json($result);
 

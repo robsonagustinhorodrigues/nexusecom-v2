@@ -62,6 +62,14 @@ class OrderProfitService
 
         // Lucro Final = Liquido de Venda - Custo dos Produtos - Imposto local
         $lucroValor = $valorLiquidoVenda - $custoTotal - $impostoFinal;
+
+        // Se o pedido está cancelado, o lucro real é zero (pois o item volta ao estoque e o dinheiro volta ao cliente)
+        if ($order->status === 'cancelado') {
+            $lucroValor = 0;
+            $custoTotal = 0;
+            $impostoFinal = 0;
+            $valorLiquidoVenda = 0;
+        }
         
         $lucroPercent = $valorProdutos > 0 ? round(($lucroValor / $valorProdutos) * 100, 1) : 0;
 

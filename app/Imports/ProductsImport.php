@@ -47,7 +47,7 @@ class ProductsImport implements ToCollection
                 $ncm = trim($row[10] ?? '');
                 $cest = trim($row[11] ?? '');
                 $marca = trim($row[12] ?? '');
-                $peso = floatval($row[13] ?? 0);
+                $peso = floatval($row[13] ?? 0) / 1000; // Grams to Kilograms
                 $altura = floatval($row[14] ?? 0);
                 $largura = floatval($row[15] ?? 0);
                 $profundidade = floatval($row[16] ?? 0);
@@ -61,17 +61,26 @@ class ProductsImport implements ToCollection
                 $sku4 = trim($row[23] ?? '');
                 $sku5 = trim($row[24] ?? '');
 
-                if (empty($nome) && empty($sku)) {
+                if (empty($nome) && empty($sku) && empty($skuVariacao)) {
                     $errors[] = 'Linha '.($index + 2).': SKU e Nome vazios';
 
                     continue;
                 }
 
                 if (empty($nome)) {
-                    $nome = $sku;
+                    $nome = $sku ?: $skuVariacao;
                 }
 
                 $productId = ! empty($row[0]) ? $row[0] : null;
+
+                // Lookup category by name if provided
+                $categoriaId = null;
+                if (!empty($categoriaNome)) {
+                    $categoria = \App\Models\Categoria::where('nome', 'ilike', $categoriaNome)->first();
+                    if ($categoria) {
+                        $categoriaId = $categoria->id;
+                    }
+                }
 
                 if ($productId) {
                     $product = Product::where('id', $productId)
@@ -103,11 +112,28 @@ class ProductsImport implements ToCollection
                         'preco_custo' => $precoCusto ?: $product->preco_custo,
                         'custo_adicional' => $custoAdicional ?: $product->custo_adicional,
                         'estoque' => $estoque ?: $product->estoque,
+                        'categoria_id' => $categoriaId ?: $product->categoria_id,
                     ]);
 
                     if (! empty($sku) && $product->sku !== $sku) {
+                        // Check if the old SKU was the principal one
+                        $oldSku = $product->sku;
                         $product->sku = $sku;
                         $product->save();
+
+                        // Sync with ProductSku table
+                        $principalSku = ProductSku::where('product_id', $product->id)
+                            ->where('sku', $oldSku)
+                            ->first() ?? $product->principalSku;
+
+                        if ($principalSku) {
+                            $principalSku->update(['sku' => $sku]);
+                        } else {
+                            ProductSku::updateOrCreate(
+                                ['product_id' => $product->id, 'sku' => $sku],
+                                ['is_principal' => true, 'grupo_id' => $this->grupoId]
+                            );
+                        }
                     }
 
                     if (! empty($skuVariacao)) {
@@ -175,6 +201,7 @@ class ProductsImport implements ToCollection
                         'preco_custo' => $precoCusto,
                         'custo_adicional' => $custoAdicional,
                         'estoque' => $estoque,
+                        'categoria_id' => $categoriaId,
                     ]);
 
                     if (! empty($skuVariacao)) {

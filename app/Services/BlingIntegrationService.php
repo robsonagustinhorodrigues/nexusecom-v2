@@ -52,6 +52,38 @@ class BlingIntegrationService
         return $this->integracao !== null && ! empty($this->accessToken);
     }
 
+    public function testConnection(): array
+    {
+        $token = $this->getAccessToken();
+
+        if (! $token) {
+            return ['success' => false, 'message' => 'Bling não conectado'];
+        }
+
+        try {
+            // Em v3, podemos testar buscando depósitos ou algo leve
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer '.$token,
+            ])->get("https://www.bling.com.br/Api/v3/depositos");
+
+            if ($response->successful()) {
+                return [
+                    'success' => true,
+                    'message' => 'Conexão OK!',
+                    'data' => $response->json()
+                ];
+            }
+
+            return [
+                'success' => false,
+                'message' => 'Erro na API: ' . ($response->json()['error']['description'] ?? $response->status()),
+            ];
+        } catch (\Exception $e) {
+            Log::error('Bling testConnection exception: '.$e->getMessage());
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
+    }
+
     public function updateNome(string $nome): bool
     {
         if (! $this->integracao) {

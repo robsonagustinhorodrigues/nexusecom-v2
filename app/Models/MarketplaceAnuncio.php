@@ -18,6 +18,7 @@ class MarketplaceAnuncio extends Model
         'external_id',
         'sku',
         'titulo',
+        'thumbnail',
         'preco',
         'estoque',
         'status',
@@ -84,7 +85,7 @@ class MarketplaceAnuncio extends Model
         $jsonData = $this->json_data ?? [];
 
         $imagens = $jsonData['pictures'] ?? [];
-        $thumbnail = $jsonData['thumbnail'] ?? null;
+        $thumbnail = $this->thumbnail ?? ($jsonData['thumbnail'] ?? null);
 
         $fotoPrincipal = null;
         $fotosGaleria = [];
