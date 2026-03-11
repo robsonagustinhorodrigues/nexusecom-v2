@@ -55,7 +55,7 @@
                                 </div>
                             </button>
                             
-                            <button @click="syncOrders('mercadolivre', true); syncDropdownOpen = false" 
+                            <button @click="openSyncModal('mercadolivre'); syncDropdownOpen = false" 
                                 class="w-full px-4 py-3 text-left text-sm text-slate-300 hover:bg-white/5 hover:text-white flex items-center gap-3 transition-colors border-t border-white/5">
                                 <div class="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center">
                                     <i class="fas fa-calendar-alt text-indigo-400"></i>
@@ -79,7 +79,7 @@
                                 </div>
                             </button>
 
-                            <button @click="syncOrders('amazon', true); syncDropdownOpen = false" 
+                            <button @click="openSyncModal('amazon'); syncDropdownOpen = false" 
                                 class="w-full px-4 py-3 text-left text-sm text-slate-300 hover:bg-white/5 hover:text-white flex items-center gap-3 transition-colors border-t border-white/5">
                                 <div class="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center">
                                     <i class="fas fa-calendar-alt text-indigo-400"></i>
@@ -693,6 +693,45 @@
             </div>
         </div>
     </div>
+    <!-- Modal Sync Por Periodo -->
+    <div x-show="showSyncModal" style="display: none;" class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" @click.self="showSyncModal = false">
+        <div class="bg-slate-800 rounded-xl border border-slate-600 w-full max-w-sm shadow-2xl overflow-hidden flex flex-col transform transition-all"
+             x-show="showSyncModal" x-transition:enter="ease-out duration-200" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100">
+            <div class="bg-slate-900 border-b border-slate-700 p-4 shrink-0 px-6 flex items-center justify-between">
+                <div>
+                    <h3 class="text-lg font-black tracking-tight text-white flex items-center gap-2">
+                        <i class="fas fa-sync" :class="syncSource === 'amazon' ? 'text-orange-400' : 'text-yellow-400'"></i> 
+                        Sincronizar <span class="capitalize" x-text="syncSource === 'mercadolivre' ? 'Mercado Livre' : syncSource"></span>
+                    </h3>
+                    <p class="text-[11px] text-slate-400 font-medium">Selecione o período (máximo 31 dias).</p>
+                </div>
+                <button @click="showSyncModal = false" class="text-slate-500 hover:text-slate-300 w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center transition-colors">
+                    <i class="fas fa-times text-sm"></i>
+                </button>
+            </div>
+            
+            <div class="p-6 bg-slate-800/50 flex-1 space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-300 uppercase tracking-wide mb-1.5">Data Inicial</label>
+                    <input type="date" x-model="syncDataDe" class="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:ring-2 focus:ring-indigo-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-300 uppercase tracking-wide mb-1.5">Data Final</label>
+                    <input type="date" x-model="syncDataAte" class="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:ring-2 focus:ring-indigo-500 outline-none">
+                </div>
+            </div>
+            
+            <div class="bg-slate-900 border-t border-slate-700 p-4 shrink-0 flex items-center justify-end gap-3">
+                <button type="button" @click="showSyncModal = false" class="px-5 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-700 transition-colors">
+                    Cancelar
+                </button>
+                <button type="button" @click="confirmPeriodSync()" class="px-5 py-2.5 rounded-lg text-sm font-bold shadow-lg transition-all flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/30">
+                    <i class="fas fa-play"></i>
+                    Iniciar Sync
+                </button>
+            </div>
+        </div>
+    </div>
 </div>
 @endsection
 
@@ -740,6 +779,11 @@ function ordersPage() {
         isSearching: false,
         selectedProduct: null,
         isSubmitting: false,
+
+        showSyncModal: false,
+        syncSource: 'mercadolivre',
+        syncDataDe: '',
+        syncDataAte: '',
         
         init() {
             const savedEmpresa = localStorage.getItem('empresa_id');
@@ -875,6 +919,18 @@ function ordersPage() {
             return document.querySelector('meta[name="csrf-token"]')?.content || '';
         },
         
+        openSyncModal(source) {
+            this.syncSource = source;
+            this.syncDataAte = this.dataAte; // Pre-fill with current global date
+            this.syncDataDe = this.dataDe;   // Pre-fill with current global date
+            this.showSyncModal = true;
+        },
+
+        confirmPeriodSync() {
+            this.showSyncModal = false;
+            this.syncOrders(this.syncSource, true);
+        },
+
         async syncOrders(marketplace = 'mercadolivre', usePeriod = false) {
             this.syncing = true;
             this.syncStatus = 'Iniciando...';
@@ -885,14 +941,14 @@ function ordersPage() {
 
             try {
                 if (usePeriod) {
-                    if (!this.dataDe || !this.dataAte) {
-                        alert('Selecione um período');
+                    if (!this.syncDataDe || !this.syncDataAte) {
+                        alert('Selecione um período no modal.');
                         this.syncing = false;
                         return;
                     }
 
-                    const start = new Date(this.dataDe);
-                    const end = new Date(this.dataAte);
+                    const start = new Date(this.syncDataDe);
+                    const end = new Date(this.syncDataAte);
                     const diffDays = Math.ceil(Math.abs(end - start) / (1000 * 60 * 60 * 24));
                     if (diffDays > 31) {
                         alert('O período máximo para sincronização é de 31 dias.');
@@ -913,7 +969,7 @@ function ordersPage() {
                     }
                     
                     if (usePeriod) {
-                        url += `&data_de=${this.dataDe}&data_ate=${this.dataAte}`;
+                        url += `&data_de=${this.syncDataDe}&data_ate=${this.syncDataAte}`;
                     }
 
                     const response = await fetch(url, { 

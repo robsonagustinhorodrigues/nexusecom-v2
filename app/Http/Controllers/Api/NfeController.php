@@ -24,7 +24,7 @@ class NfeController extends Controller
         // Query para notas EMITIDAS (onde a empresa é a emissora)
         $qEmitidas = \DB::table('nfe_emitidas')
             ->select(
-                'id', 'chave', 'numero', 'serie', 'valor_total', 'data_emissao', 'tipo_fiscal', 'empresa_id',
+                'id', 'chave', 'numero', 'serie', 'valor_total', 'data_emissao', 'tipo_fiscal', 'empresa_id', 'xml_path',
                 'cliente_nome as counterparty_nome', 'cliente_cnpj as counterparty_cnpj',
                 'status as status_nfe',
                 \DB::raw("'emitida' as origin")
@@ -35,18 +35,69 @@ class NfeController extends Controller
         // Query para notas RECEBIDAS (onde terceiros são os emissores)
         $qRecebidas = \DB::table('nfe_recebidas')
             ->select(
-                'id', 'chave', 'numero', 'serie', 'valor_total', 'data_emissao', 'tipo_fiscal', 'empresa_id',
+                'id', 'chave', 'numero', 'serie', 'valor_total', 'data_emissao', 'tipo_fiscal', 'empresa_id', 'xml_path',
                 'emitente_nome as counterparty_nome', 'emitente_cnpj as counterparty_cnpj',
                 'status_nfe',
                 \DB::raw("'recebida' as origin")
             )
             ->where('empresa_id', $empresaId)
             ->where('tipo_fiscal', $movementType);
+        // Aplica filtro de finalidade (CFOP) se fornecido
+        // Aplica filtro de finalidade (CFOP) se fornecido
+        if ($request->finalidade) {
+            $finalidade = $request->finalidade;
+            
+            // Subquery específica para Emitidas (garantindo que nfe_recebida_id não atrapalhe)
+            $qEmitidas->whereExists(function($q) use ($finalidade) {
+                $q->select(\DB::raw(1))->from('nfe_items')->whereColumn('nfe_items.nfe_emitida_id', 'nfe_emitidas.id');
+                $q->where(function ($subq) use ($finalidade) {
+                    if ($finalidade === 'venda') {
+                        $subq->whereRaw('SUBSTR(cfop, 2, 3) BETWEEN \'101\' AND \'129\'')
+                             ->orWhereRaw('SUBSTR(cfop, 2, 3) BETWEEN \'401\' AND \'409\'')
+                             ->orWhereIn('cfop', ['5102', '6102', '5108', '6108']);
+                    } elseif ($finalidade === 'devolucao') {
+                        $subq->whereRaw('SUBSTR(cfop, 2, 3) BETWEEN \'201\' AND \'229\'')
+                             ->orWhereRaw('SUBSTR(cfop, 2, 3) BETWEEN \'410\' AND \'419\'')
+                             ->orWhereIn('cfop', ['1202', '2202', '5202', '6202', '1411', '2411']);
+                    } elseif ($finalidade === 'transferencia') {
+                        $subq->whereRaw('SUBSTR(cfop, 2, 3) BETWEEN \'151\' AND \'159\'');
+                    } elseif ($finalidade === 'outras') {
+                        $subq->whereRaw('SUBSTR(cfop, 2, 3) BETWEEN \'900\' AND \'949\'');
+                    }
+                });
+            });
 
-        // Define a query base combinada
-        $unionQuery = $qEmitidas->union($qRecebidas);
-        $query = \DB::table(\DB::raw("({$unionQuery->toSql()}) as combined"))
-            ->mergeBindings($unionQuery);
+            // Subquery específica para Recebidas
+            $qRecebidas->whereExists(function($q) use ($finalidade) {
+                $q->select(\DB::raw(1))->from('nfe_items')->whereColumn('nfe_items.nfe_recebida_id', 'nfe_recebidas.id');
+                $q->where(function ($subq) use ($finalidade) {
+                    if ($finalidade === 'venda') {
+                        $subq->whereRaw('SUBSTR(cfop, 2, 3) BETWEEN \'101\' AND \'129\'')
+                             ->orWhereRaw('SUBSTR(cfop, 2, 3) BETWEEN \'401\' AND \'409\'')
+                             ->orWhereIn('cfop', ['5102', '6102', '5108', '6108']);
+                    } elseif ($finalidade === 'devolucao') {
+                        $subq->whereRaw('SUBSTR(cfop, 2, 3) BETWEEN \'201\' AND \'229\'')
+                             ->orWhereRaw('SUBSTR(cfop, 2, 3) BETWEEN \'410\' AND \'419\'')
+                             ->orWhereIn('cfop', ['1202', '2202', '5202', '6202', '1411', '2411']);
+                    } elseif ($finalidade === 'transferencia') {
+                        $subq->whereRaw('SUBSTR(cfop, 2, 3) BETWEEN \'151\' AND \'159\'');
+                    } elseif ($finalidade === 'outras') {
+                        $subq->whereRaw('SUBSTR(cfop, 2, 3) BETWEEN \'900\' AND \'949\'');
+                    }
+                });
+            });
+        }
+        // Aplica filtro de categoria (origem) se fornecido
+        if ($request->categoria === 'emitida') {
+            $unionQuery = $qEmitidas;
+        } elseif ($request->categoria === 'recebida') {
+            $unionQuery = $qRecebidas;
+        } else {
+            $unionQuery = $qEmitidas->union($qRecebidas);
+        }
+
+        // Define a query base combinada usando fromSub para garantir bindings corretos
+        $query = \DB::query()->fromSub($unionQuery, 'combined');
 
         // Filtros de busca
         if ($request->search) {

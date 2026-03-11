@@ -177,6 +177,20 @@
                         <option value="inutilizada" class="bg-black">🚫 Inutilizada</option>
                     </select>
 
+                    <select x-model="categoriaFilter" @change="loadNfe()" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-400 focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none cursor-pointer">
+                        <option value="" class="bg-black">Origem</option>
+                        <option value="emitida" class="bg-black">📝 Emitidas</option>
+                        <option value="recebida" class="bg-black">📩 Recebidas</option>
+                    </select>
+
+                    <select x-model="finalidadeFilter" @change="loadNfe()" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-400 focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none cursor-pointer">
+                        <option value="" class="bg-black">Finalidade</option>
+                        <option value="venda" class="bg-black">🛍️ Venda</option>
+                        <option value="devolucao" class="bg-black">↩️ Devolução / Retorno</option>
+                        <option value="transferencia" class="bg-black">🚚 Transferência</option>
+                        <option value="outras" class="bg-black">📦 Outras</option>
+                    </select>
+
                     <select x-model="associationFilter" @change="loadNfe()" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-400 focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none cursor-pointer">
                         <option value="" class="bg-black">Associação</option>
                         <option value="pending" class="bg-black">🟡 Pendentes</option>
@@ -229,10 +243,10 @@
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-700/50">
-                    <template x-for="n in nfe" :key="n.id">
+                    <template x-for="n in nfe" :key="n.categoria + '-' + n.id">
                         <tr class="group hover:bg-slate-700/20 transition-colors">
                             <td class="px-2 py-4 text-center">
-                                <input type="checkbox" :value="n.id" x-model="selected" class="rounded bg-slate-700 border-slate-600 text-indigo-500">
+                                <input type="checkbox" :value="n.categoria + '-' + n.id" x-model="selected" class="rounded bg-slate-700 border-slate-600 text-indigo-500">
                             </td>
                             <td class="px-6 py-4">
                                 <div class="flex flex-col">
@@ -427,6 +441,7 @@ function fiscalPage() {
     return {
             view: 'entradas',
             filtroSituacao: '',
+            categoriaFilter: '',
             filtersOpen: false,
             associationFilter: '',
             dataInicio: '',
@@ -464,12 +479,12 @@ function fiscalPage() {
         canceladasCount: 0,
         
         get totalSelecionadas() {
-            return this.nfe.filter(n => this.selected.includes(String(n.id))).reduce((sum, n) => sum + parseFloat(n.valor_total || 0), 0);
+            return this.nfe.filter(n => this.selected.includes(n.categoria + '-' + n.id)).reduce((sum, n) => sum + parseFloat(n.valor_total || 0), 0);
         },
         
         toggleAll(checked) {
             if (checked) {
-                this.selected = this.nfe.map(n => String(n.id));
+                this.selected = this.nfe.map(n => n.categoria + '-' + n.id);
             } else {
                 this.selected = [];
             }
@@ -525,6 +540,8 @@ function fiscalPage() {
                 else this.view = v;
             }
             if (urlParams.has('situacao')) this.filtroSituacao = urlParams.get('situacao');
+            if (urlParams.has('categoria')) this.categoriaFilter = urlParams.get('categoria');
+            if (urlParams.has('finalidade')) this.finalidadeFilter = urlParams.get('finalidade');
             if (urlParams.has('association')) this.associationFilter = urlParams.get('association');
             if (urlParams.has('data_inicio')) this.dataInicio = urlParams.get('data_inicio');
             if (urlParams.has('data_fim')) this.dataFim = urlParams.get('data_fim');
@@ -536,6 +553,8 @@ function fiscalPage() {
             if (this.search) params.set('search', this.search);
             if (this.view && this.view !== 'entradas') params.set('view', this.view);
             if (this.filtroSituacao) params.set('situacao', this.filtroSituacao);
+            if (this.categoriaFilter) params.set('categoria', this.categoriaFilter);
+            if (this.finalidadeFilter) params.set('finalidade', this.finalidadeFilter);
             if (this.associationFilter) params.set('association', this.associationFilter);
             if (this.dataInicio) params.set('data_inicio', this.dataInicio);
             if (this.dataFim) params.set('data_fim', this.dataFim);
@@ -565,6 +584,8 @@ function fiscalPage() {
                     data_inicio: this.dataInicio,
                     data_fim: this.dataFim,
                     search: this.search,
+                    categoria: this.categoriaFilter,
+                    finalidade: this.finalidadeFilter,
                     association: this.associationFilter,
                     page: this.currentPage
                 });
@@ -939,24 +960,36 @@ function fiscalPage() {
             if (!confirm(`Reprocessar ${this.selected.length} notas?`)) return;
             
             this.loading = true;
+            
+            const emitidas = this.selected.filter(s => s.startsWith('emitida-')).map(s => s.replace('emitida-', ''));
+            const recebidas = this.selected.filter(s => s.startsWith('recebida-')).map(s => s.replace('recebida-', ''));
+            
             try {
-                const response = await fetch('/api/nfe/reprocess-association', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    },
-                    body: JSON.stringify({
-                        ids: this.selected,
-                        type: this.view === 'entradas' ? 'recebida' : 'emitida'
-                    })
-                });
-                
-                if (response.ok) {
-                    this.selected = [];
-                    await this.loadNfe();
-                    alert('Associação reprocessada com sucesso!');
+                if (emitidas.length > 0) {
+                    await fetch('/api/nfes/reprocess-association', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                        },
+                        body: JSON.stringify({ ids: emitidas, type: 'emitida' })
+                    });
                 }
+                
+                if (recebidas.length > 0) {
+                    await fetch('/api/nfes/reprocess-association', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                        },
+                        body: JSON.stringify({ ids: recebidas, type: 'recebida' })
+                    });
+                }
+                
+                this.selected = [];
+                await this.loadNfe();
+                alert('Associação reprocessada com sucesso!');
             } catch (e) {
                 console.error(e);
                 alert('Erro ao reprocessar');
