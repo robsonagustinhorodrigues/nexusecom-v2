@@ -248,9 +248,32 @@ class OrderController extends Controller
 
         $order = MarketplacePedido::findOrFail($request->order_id);
         
-        $anuncio = \App\Models\MarketplaceAnuncio::where('external_id', $request->item_id)
-            ->where('empresa_id', $order->empresa_id)
-            ->first();
+        // Find the seller sku for this item to fallback on
+        $jsonData = $order->json_data ?? [];
+        $orderItems = $jsonData['order_items'] ?? $order->cart_json ?? [];
+        $sellerSku = null;
+        
+        foreach ($orderItems as $item) {
+            $itemId = $item['item']['id'] ?? $item['OrderItemId'] ?? null;
+            if ($itemId === $request->item_id) {
+                $sellerSku = $item['item']['seller_sku'] ?? $item['SellerSKU'] ?? null;
+                break;
+            }
+        }
+        
+        $anuncioQuery = \App\Models\MarketplaceAnuncio::where('empresa_id', $order->empresa_id)
+            ->where(function($q) use ($request, $sellerSku) {
+                $q->where('external_id', $request->item_id);
+                if ($sellerSku) {
+                    $q->orWhere('sku', $sellerSku);
+                }
+            });
+            
+        if ($order->marketplace) {
+            $anuncioQuery->where('marketplace', $order->marketplace);
+        }
+            
+        $anuncio = $anuncioQuery->first();
 
         if ($anuncio) {
             $anuncio->update(['product_sku_id' => $request->produto_id]);
@@ -259,11 +282,11 @@ class OrderController extends Controller
         }
 
         // Optional: Update the sku in the order's json_data as well if needed
-        $jsonData = $order->json_data;
         $productSku = \App\Models\ProductSku::where('product_id', $request->produto_id)->first();
         if ($productSku && isset($jsonData['order_items'])) {
             foreach ($jsonData['order_items'] as &$mItem) {
-                if (($mItem['item']['id'] ?? '') === $request->item_id) {
+                $itemId = $mItem['item']['id'] ?? $mItem['OrderItemId'] ?? null;
+                if ($itemId === $request->item_id) {
                     $mItem['item']['seller_sku'] = $productSku->sku;
                 }
             }

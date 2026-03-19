@@ -91,6 +91,7 @@
                         ['route' => 'anuncios.index', 'icon' => 'fa-store', 'label' => 'Anúncios'],
                         ['route' => 'estoque.index', 'icon' => 'fa-warehouse', 'label' => 'Estoque'],
                         ['route' => 'fiscal.nfe', 'icon' => 'fa-file-invoice-dollar', 'label' => 'NF-e'],
+                        ['route' => 'fiscal.relatorio.ncm', 'icon' => 'fa-receipt', 'label' => 'Relatório NCM'],
                         ['route' => 'dre.index', 'icon' => 'fa-chart-pie', 'label' => 'DRE'],
                         ['route' => 'integrations.index', 'icon' => 'fa-plug', 'label' => 'Integrações'],
                         ['route' => 'admin.empresas', 'icon' => 'fa-building', 'label' => 'Empresas'],

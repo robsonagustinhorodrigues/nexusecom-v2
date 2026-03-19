@@ -150,26 +150,26 @@
                 <!-- Search -->
                 <div class="flex-1 min-w-[200px] relative group">
                     <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-indigo-500 transition-colors"></i>
-                    <input type="text" x-model="search" @input.debounce.300ms="loadNfe()"
+                    <input type="text" x-model="search" @keyup.enter="loadNfe()"
                         placeholder="Pesquisar número, chave, fornecedor..."
                         class="w-full bg-slate-900/50 border border-slate-700/50 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 focus:outline-none transition-all">
                 </div>
 
                 <!-- Date Range -->
                 <div class="flex items-center bg-slate-900/50 border border-slate-700/50 rounded-xl px-2 gap-2">
-                    <input type="date" x-model="dataInicio" @change="loadNfe()" class="bg-transparent border-none py-2 text-xs text-slate-300 focus:ring-0 outline-none">
+                    <input type="date" x-model="dataInicio" class="bg-transparent border-none py-2 text-xs text-slate-300 focus:ring-0 outline-none">
                     <span class="text-slate-600 font-bold text-[10px]">ATÉ</span>
-                    <input type="date" x-model="dataFim" @change="loadNfe()" class="bg-transparent border-none py-2 text-xs text-slate-300 focus:ring-0 outline-none">
+                    <input type="date" x-model="dataFim" class="bg-transparent border-none py-2 text-xs text-slate-300 focus:ring-0 outline-none">
                 </div>
 
                 <!-- Category Filters -->
                 <div class="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 md:pb-0">
-                    <select x-model="view" @change="filtroSituacao = ''; loadNfe()" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-300 focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none cursor-pointer">
+                    <select x-model="view" @change="filtroSituacao = ''" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-300 focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none cursor-pointer">
                         <option value="entradas" class="bg-black">📥 Entradas</option>
                         <option value="saidas" class="bg-black">📤 Saídas</option>
                     </select>
 
-                    <select x-model="filtroSituacao" @change="loadNfe()" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-400 focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none cursor-pointer">
+                    <select x-model="filtroSituacao" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-400 focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none cursor-pointer">
                         <option value="" class="bg-black">Situação</option>
                         <option value="autorizada" class="bg-black">✅ Autorizada</option>
                         <option value="cancelada" class="bg-black">❌ Cancelada</option>
@@ -177,13 +177,13 @@
                         <option value="inutilizada" class="bg-black">🚫 Inutilizada</option>
                     </select>
 
-                    <select x-model="categoriaFilter" @change="loadNfe()" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-400 focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none cursor-pointer">
+                    <select x-model="categoriaFilter" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-400 focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none cursor-pointer">
                         <option value="" class="bg-black">Origem</option>
                         <option value="emitida" class="bg-black">📝 Emitidas</option>
                         <option value="recebida" class="bg-black">📩 Recebidas</option>
                     </select>
 
-                    <select x-model="finalidadeFilter" @change="loadNfe()" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-400 focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none cursor-pointer">
+                    <select x-model="finalidadeFilter" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-400 focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none cursor-pointer">
                         <option value="" class="bg-black">Finalidade</option>
                         <option value="venda" class="bg-black">🛍️ Venda</option>
                         <option value="devolucao" class="bg-black">↩️ Devolução / Retorno</option>
@@ -191,12 +191,19 @@
                         <option value="outras" class="bg-black">📦 Outras</option>
                     </select>
 
-                    <select x-model="associationFilter" @change="loadNfe()" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-400 focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none cursor-pointer">
+                    <select x-model="associationFilter" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-400 focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none cursor-pointer">
                         <option value="" class="bg-black">Associação</option>
                         <option value="pending" class="bg-black">🟡 Pendentes</option>
                         <option value="partial" class="bg-black">🔵 Parciais</option>
                         <option value="associated" class="bg-black">🟢 Associadas</option>
                     </select>
+
+                    <!-- Filter Button -->
+                    <button @click="loadNfe()" 
+                        class="bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-500/50 rounded-xl px-4 py-2 text-sm font-bold flex items-center gap-2 transition-all shadow-lg active:scale-95 whitespace-nowrap">
+                        <i class="fas fa-filter"></i>
+                        <span>Filtrar</span>
+                    </button>
                 </div>
             </div>
 
@@ -397,38 +404,22 @@
                     <div class="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center">
                         <i class="fas fa-file-code text-indigo-400"></i>
                     </div>
-                    <h3 class="font-bold text-white">Importar XML</h3>
+                    <h3 class="font-bold text-white">Importar XML / ZIP</h3>
                 </div>
                 <button @click="showImportXml = false" class="text-slate-400 hover:text-white">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
-            <label class="border-2 border-dashed border-slate-600 rounded-xl p-8 flex flex-col items-center cursor-pointer hover:border-indigo-500 transition">
-                <i class="fas fa-cloud-upload-alt text-3xl text-slate-500 mb-2"></i>
-                <span class="text-sm text-slate-400">Clique para selecionar arquivo XML</span>
-                <input type="file" accept=".xml" @change="importXml($event)" class="hidden">
-            </label>
-        </div>
-    </div>
-
-    <!-- ZIP Import Modal -->
-    <div x-show="showImportZip" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md" @click.stop>
-            <div class="flex items-center justify-between mb-6">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
-                        <i class="fas fa-file-archive text-amber-400"></i>
-                    </div>
-                    <h3 class="font-bold text-white">Importar ZIP</h3>
-                </div>
-                <button @click="showImportZip = false" class="text-slate-400 hover:text-white">
-                    <i class="fas fa-times"></i>
-                </button>
+            
+            <div x-show="importing" class="py-8 flex flex-col items-center justify-center text-indigo-400">
+                <i class="fas fa-circle-notch fa-spin text-4xl mb-4"></i>
+                <p class="font-bold animate-pulse">Enviando e processando arquivo...</p>
             </div>
-            <label class="border-2 border-dashed border-slate-600 rounded-xl p-8 flex flex-col items-center cursor-pointer hover:border-indigo-500 transition">
+            
+            <label x-show="!importing" class="border-2 border-dashed border-slate-600 rounded-xl p-8 flex flex-col items-center cursor-pointer hover:border-indigo-500 transition">
                 <i class="fas fa-cloud-upload-alt text-3xl text-slate-500 mb-2"></i>
-                <span class="text-sm text-slate-400">Clique para selecionar arquivo ZIP</span>
-                <input type="file" accept=".zip" @change="importZip($event)" class="hidden">
+                <span class="text-sm text-slate-400 text-center mt-2">Clique para selecionar arquivo XML ou ZIP</span>
+                <input type="file" accept=".xml,.zip" @change="importFile($event)" class="hidden">
             </label>
         </div>
     </div>
@@ -442,6 +433,7 @@ function fiscalPage() {
             view: 'entradas',
             filtroSituacao: '',
             categoriaFilter: '',
+            finalidadeFilter: '',
             filtersOpen: false,
             associationFilter: '',
             dataInicio: '',
@@ -451,7 +443,6 @@ function fiscalPage() {
             showImportMeli: false,
             showImportBling: false,
             showImportXml: false,
-            showImportZip: false,
             importLoading: false,
             importResult: null,
             meliDataInicio: '',
@@ -837,40 +828,7 @@ function fiscalPage() {
             this.importing = false;
         },
         
-        async importXml() {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = '.xml,.zip';
-            input.onchange = async (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                
-                this.importing = true;
-                const formData = new FormData();
-                formData.append('file', file);
-                
-                try {
-                    const response = await fetch('/api/nfes/import-xml', {
-                        method: 'POST',
-                        headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
-                        body: formData
-                    });
-                    
-                    const result = await response.json();
-                    if (response.ok) {
-                        alert(`Importado: ${result.imported || 0} notas`);
-                        await this.loadNfe();
-                    } else {
-                        alert('Erro: ' + (result.message || 'Erro'));
-                    }
-                } catch (e) {
-                    console.error(e);
-                    alert('Erro na conexão');
-                }
-                this.importing = false;
-            };
-            input.click();
-        },
+
         
         async importFromBling() {
             if (!this.blingDataInicio || !this.blingDataFim) {
@@ -1048,16 +1006,20 @@ function fiscalPage() {
             this.importLoading = false;
         },
         
-        async importXml(event) {
+        async importFile(event) {
             const file = event.target.files[0];
             if (!file) return;
             
-            this.importLoading = true;
+            const isZip = file.name.toLowerCase().endsWith('.zip');
+            this.importing = true;
+            this.importMenu = false;
             const formData = new FormData();
-            formData.append('xml', file);
+            formData.append(isZip ? 'zip' : 'xml', file);
+            formData.append('empresa_id', this.empresaId || localStorage.getItem('empresa_id') || 6);
             
             try {
-                const response = await fetch('/api/nfe/import/xml', {
+                const endpoint = isZip ? '/api/nfes/import-zip' : '/api/nfes/import-xml';
+                const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
                     body: formData
@@ -1065,7 +1027,7 @@ function fiscalPage() {
                 
                 const data = await response.json();
                 if (data.success) {
-                    alert('XML importado com sucesso!');
+                    alert('Arquivo importado com sucesso!');
                     this.showImportXml = false;
                     await this.loadNfe();
                 } else {
@@ -1073,39 +1035,11 @@ function fiscalPage() {
                 }
             } catch (e) {
                 console.error(e);
-                alert('Erro ao importar XML');
+                alert('Erro ao importar arquivo. Verifique se o arquivo não excede o limite do servidor.');
             }
-            this.importLoading = false;
-        },
-        
-        async importZip(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            
-            this.importLoading = true;
-            const formData = new FormData();
-            formData.append('zip', file);
-            
-            try {
-                const response = await fetch('/api/nfe/import/zip', {
-                    method: 'POST',
-                    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
-                    body: formData
-                });
-                
-                const data = await response.json();
-                if (data.success) {
-                    alert('ZIP importado! As notas serão processadas em background.');
-                    this.showImportZip = false;
-                    await this.loadNfe();
-                } else {
-                    alert('Erro: ' + (data.message || 'Erro desconhecido'));
-                }
-            } catch (e) {
-                console.error(e);
-                alert('Erro ao importar ZIP');
-            }
-            this.importLoading = false;
+            this.importing = false;
+            // Clear input so same file can be selected again if needed
+            event.target.value = '';
         }
     }
 }

@@ -22,24 +22,40 @@ class MeliService
         $userId = $integracao->external_user_id;
         $accessToken = $integracao->access_token;
 
+        $allItemIds = [];
+        $limit = 50;
+        $offset = 0;
+        $total = 0;
+
         try {
-            // 1. Busca IDs de todos os anúncios (paginado)
-            $searchResponse = Http::withToken($accessToken)
-                ->get("https://api.mercadolibre.com/users/{$userId}/items/search");
+            // 1. Busca IDs de todos os anúncios (paginado para tirar limitações)
+            do {
+                $searchResponse = Http::withToken($accessToken)
+                    ->get("https://api.mercadolibre.com/users/{$userId}/items/search", [
+                        'offset' => $offset,
+                        'limit' => $limit
+                    ]);
 
-            if ($searchResponse->failed()) {
-                throw new \Exception('Erro ao buscar itens ML: '.$searchResponse->body());
-            }
+                if ($searchResponse->failed()) {
+                    throw new \Exception('Erro ao buscar itens ML: '.$searchResponse->body());
+                }
 
-            $itemIds = $searchResponse->json('results') ?? [];
+                $data = $searchResponse->json();
+                $itemIds = $data['results'] ?? [];
+                $allItemIds = array_merge($allItemIds, $itemIds);
+                
+                $total = $data['paging']['total'] ?? 0;
+                $offset += $limit;
 
-            foreach ($itemIds as $itemId) {
+            } while ($offset < $total && !empty($itemIds));
+
+            foreach ($allItemIds as $itemId) {
                 // 2. Busca detalhes de cada anúncio com todos os atributos
                 $itemResponse = Http::withToken($accessToken)
                     ->get("https://api.mercadolibre.com/items/{$itemId}?include_attributes=all");
 
                 if ($itemResponse->successful()) {
-                    $data = $itemResponse->json();
+                    $itemData = $itemResponse->json();
 
                     // Buscar descrição separada
                     try {
@@ -47,123 +63,29 @@ class MeliService
                             ->get("https://api.mercadolibre.com/items/{$itemId}/description");
                         if ($descResponse->successful()) {
                             $descData = $descResponse->json();
-                            $data['description'] = $descData['plain_text'] ?? $descData['text'] ?? null;
+                            $itemData['description'] = $descData['plain_text'] ?? $descData['text'] ?? null;
                         }
                     } catch (\Exception $e) {
                         Log::warning('Erro ao buscar descrição: '.$e->getMessage());
                     }
 
-                    // Enriquecer variações com URLs de imagens
-                    if (! empty($data['variations'])) {
-                        foreach ($data['variations'] as &$variation) {
-                            if (! empty($variation['picture_ids'])) {
-                                $pictureUrls = [];
-                                foreach ($variation['picture_ids'] as $picId) {
-                                    $picResponse = Http::withToken($accessToken)
-                                        ->get("https://api.mercadolibre.com/pictures/{$picId}/fetch", [
-                                            'size' => '500x500',
-                                        ]);
-                                    if ($picResponse->successful()) {
-                                        $pictureUrls[] = $picResponse->json('url') ?? "https://http2.mlstatic.com/D_{$picId}-I.jpg";
-                                    }
-                                }
-                                $variation['picture_urls'] = $pictureUrls;
-                            }
+                    // Se o item tem variações, sincronizamos cada uma
+                    if (!empty($itemData['variations'])) {
+                        foreach ($itemData['variations'] as $variation) {
+                            $this->upsertAnuncioVariation($integracao, $itemData, $variation, $accessToken);
                         }
+                    } else {
+                        // Sem variações, sincroniza o item principal
+                        $this->upsertAnuncioSimple($integracao, $itemData, $accessToken);
                     }
-
-                    // Buscar informações do produto via user_product_id
-                    if (! empty($data['user_product_id'])) {
-                        try {
-                            $upResponse = Http::withToken($accessToken)
-                                ->get("https://api.mercadolibre.com/user-products/{$data['user_product_id']}");
-                            if ($upResponse->successful()) {
-                                $data['user_product_info'] = $upResponse->json();
-                            }
-                        } catch (\Exception $e) {
-                            Log::warning('Erro ao buscar user_product: '.$e->getMessage());
-                        }
-                    }
-
-                    // Buscar informações do produto/categoria
-                    if (! empty($data['catalog_product_id'])) {
-                        $productResponse = Http::withToken($accessToken)
-                            ->get("https://api.mercadolibre.com/products/{$data['catalog_product_id']}");
-                        if ($productResponse->successful()) {
-                            $data['product_info'] = $productResponse->json();
-                        }
-                    }
-
-                    // Buscar SKU nos atributos (SELLER_SKU)
-                    $skuPrincipal = null;
-
-                    // Primeiro tenta nos atributos do item (SELLER_SKU)
-                    if (! empty($data['attributes'])) {
-                        foreach ($data['attributes'] as $attr) {
-                            if ($attr['id'] === 'SELLER_SKU' || $attr['id'] === '-seller_sku') {
-                                $skuPrincipal = $attr['value_name'] ?? null;
-                                break;
-                            }
-                            if ($attr['id'] === 'CODE' || $attr['id'] === 'PRODUCT_CODE') {
-                                $skuPrincipal = $attr['value_name'] ?? null;
-                            }
-                        }
-                    }
-
-                    // Se não encontrou, tenta no campo direto
-                    if (! $skuPrincipal) {
-                        $skuPrincipal = $data['seller_sku'] ?? $data['sku'] ?? null;
-                    }
-
-                    // Se ainda não encontrou, tenta nas variações
-                    if (! $skuPrincipal && ! empty($data['variations'])) {
-                        foreach ($data['variations'] as $variation) {
-                            if (! empty($variation['seller_custom_field'])) {
-                                $skuPrincipal = $variation['seller_custom_field'];
-                                break;
-                            }
-                            if (! empty($variation['sku'])) {
-                                $skuPrincipal = $variation['sku'];
-                                break;
-                            }
-                            // Tentar encontrar SELLER_SKU nos atributos da variação
-                            if (! empty($variation['attributes'])) {
-                                foreach ($variation['attributes'] as $attr) {
-                                    if ($attr['id'] === 'SELLER_SKU' || $attr['id'] === '-seller_sku') {
-                                        $skuPrincipal = $attr['value_name'] ?? null;
-                                        break 2;
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    MarketplaceAnuncio::updateOrCreate(
-                        [
-                            'integracao_id' => $integracao->id,
-                            'external_id' => $itemId,
-                        ],
-                        [
-                            'empresa_id' => $integracao->empresa_id,
-                            'marketplace' => 'mercadolivre',
-                            'titulo' => $data['title'],
-                            'sku' => $skuPrincipal,
-                            'preco' => $data['price'],
-                            'estoque' => $data['available_quantity'],
-                            'status' => $data['status'],
-                            'url_anuncio' => $data['permalink'],
-                            'json_data' => $data,
-                            // Se voltou a ter status active, reabrir
-                            'closed_at' => $data['status'] === 'active' ? null : ($data['status'] === 'closed' ? now() : null),
-                            'closed_reason' => $data['status'] === 'active' ? null : ($data['status'] === 'closed' ? 'ml_closed' : null),
-                        ]
-                    );
                 }
             }
 
             // 3. Marcar como fechados os anúncios que não existem mais no ML
+            // Importante: Aqui precisamos considerar external_id E variation_id se quisermos ser precisos,
+            // mas o item_id excluido remove todas as variações.
             $fechados = MarketplaceAnuncio::where('integracao_id', $integracao->id)
-                ->whereNotIn('external_id', $itemIds)
+                ->whereNotIn('external_id', $allItemIds)
                 ->whereNull('closed_at')
                 ->update([
                     'status' => 'closed',
@@ -176,16 +98,125 @@ class MeliService
             }
 
             // 4. Batch sync Visits API
-            if (!empty($itemIds)) {
-                $this->syncVisits($integracao, $itemIds);
+            if (!empty($allItemIds)) {
+                $this->syncVisits($integracao, $allItemIds);
             }
 
-            return count($itemIds);
+            return count($allItemIds);
 
         } catch (\Exception $e) {
             Log::error('Erro Sync ML Anuncios: '.$e->getMessage());
             throw $e;
         }
+    }
+
+    /**
+     * Sincroniza um anúncio simples (sem variações)
+     */
+    private function upsertAnuncioSimple(Integracao $integracao, array $data, string $accessToken)
+    {
+        $itemId = $data['id'];
+        $sku = $this->extractSku($data);
+
+        MarketplaceAnuncio::updateOrCreate(
+            [
+                'integracao_id' => $integracao->id,
+                'external_id' => $itemId,
+                'variation_id' => null,
+            ],
+            [
+                'empresa_id' => $integracao->empresa_id,
+                'marketplace' => 'mercadolivre',
+                'titulo' => $data['title'],
+                'sku' => $sku,
+                'preco' => $data['price'],
+                'estoque' => $data['available_quantity'],
+                'status' => $data['status'],
+                'url_anuncio' => $data['permalink'],
+                'json_data' => $data,
+                'thumbnail' => $data['thumbnail'] ?? null,
+                'closed_at' => $data['status'] === 'active' ? null : ($data['status'] === 'closed' ? now() : null),
+                'closed_reason' => $data['status'] === 'active' ? null : ($data['status'] === 'closed' ? 'ml_closed' : null),
+            ]
+        );
+    }
+
+    /**
+     * Sincroniza uma variação específica de um anúncio
+     */
+    private function upsertAnuncioVariation(Integracao $integracao, array $itemData, array $variation, string $accessToken)
+    {
+        $itemId = $itemData['id'];
+        $variationId = $variation['id'];
+        
+        // SKU da variação
+        $sku = $variation['seller_custom_field'] ?? null;
+        if (!$sku && !empty($variation['attributes'])) {
+            foreach ($variation['attributes'] as $attr) {
+                if ($attr['id'] === 'SELLER_SKU' || $attr['id'] === '-seller_sku') {
+                    $sku = $attr['value_name'] ?? null;
+                    break;
+                }
+            }
+        }
+
+        // Título formatado com variação para facilitar visualização no ERP
+        $titulo = $itemData['title'];
+        $labels = [];
+        if (!empty($variation['attribute_combinations'])) {
+            foreach ($variation['attribute_combinations'] as $comb) {
+                $labels[] = $comb['value_name'] ?? '';
+            }
+        }
+        if (!empty($labels)) {
+            $titulo .= " - " . implode(' / ', array_filter($labels));
+        }
+
+        // Thumbnail específica da variação se houver
+        $thumbnail = $itemData['thumbnail'];
+        if (!empty($variation['picture_ids'])) {
+            $picId = $variation['picture_ids'][0];
+            $thumbnail = "https://http2.mlstatic.com/D_{$picId}-I.jpg";
+        }
+
+        // Mesclar dados da variação no JSON do item para referência
+        $mergedData = $itemData;
+        $mergedData['variation_id'] = $variationId;
+        $mergedData['variation_data'] = $variation;
+
+        MarketplaceAnuncio::updateOrCreate(
+            [
+                'integracao_id' => $integracao->id,
+                'external_id' => $itemId,
+                'variation_id' => $variationId,
+            ],
+            [
+                'empresa_id' => $integracao->empresa_id,
+                'marketplace' => 'mercadolivre',
+                'titulo' => $titulo,
+                'sku' => $sku,
+                'preco' => $variation['price'] ?? $itemData['price'],
+                'estoque' => $variation['available_quantity'] ?? 0,
+                'status' => $itemData['status'],
+                'url_anuncio' => $itemData['permalink'],
+                'json_data' => $mergedData,
+                'thumbnail' => $thumbnail,
+                'closed_at' => $itemData['status'] === 'active' ? null : ($itemData['status'] === 'closed' ? now() : null),
+                'closed_reason' => $itemData['status'] === 'active' ? null : ($itemData['status'] === 'closed' ? 'ml_closed' : null),
+            ]
+        );
+    }
+
+    private function extractSku(array $data)
+    {
+        if (! empty($data['attributes'])) {
+            foreach ($data['attributes'] as $attr) {
+                if ($attr['id'] === 'SELLER_SKU' || $attr['id'] === '-seller_sku') {
+                    return $attr['value_name'] ?? null;
+                }
+            }
+        }
+        return $data['seller_sku'] ?? $data['sku'] ?? null;
     }
 
     /**

@@ -16,6 +16,7 @@ class MarketplaceAnuncio extends Model
         'product_sku_id',
         'marketplace',
         'external_id',
+        'variation_id',
         'sku',
         'titulo',
         'thumbnail',

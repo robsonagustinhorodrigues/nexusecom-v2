@@ -152,6 +152,7 @@ class AnuncioController extends Controller
             'updated_at' => $ad->updated_at,
             'meli_date_created' => $dateCreated,
             'meli_last_updated' => $lastUpdated,
+            'slug' => \Illuminate\Support\Str::slug($ad->titulo),
         ];
     }
 
@@ -332,17 +333,70 @@ class AnuncioController extends Controller
         $empresaId = $request->get('empresa', $request->get('empresa_id', session('empresa_id', 6)));
         $marketplace = $request->get('marketplace', 'mercadolivre');
 
-        if ($marketplace === 'amazon') {
-            $service = new \App\Services\AmazonSpApiService($empresaId);
-            $result = $service->syncListings();
-            return response()->json($result);
-        }
+        \Log::info("Iniciando sincronização de anúncios: Empresa {$empresaId}, Marketplace {$marketplace}");
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Sincronização iniciada',
-            'synced' => 0,
-        ]);
+        try {
+            if ($marketplace === 'amazon') {
+                $integracao = \App\Models\Integracao::where('empresa_id', $empresaId)
+                    ->where('marketplace', 'amazon')
+                    ->where('ativo', true)
+                    ->first();
+
+                if (!$integracao) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Integração Amazon não encontrada ou inativa para esta empresa.'
+                    ], 422);
+                }
+
+                $service = new \App\Services\AmazonSpApiService($empresaId);
+                $result = $service->syncListings();
+                
+                if (isset($result['error']) && $result['error'] === 'Credenciais não configuradas') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Credenciais Amazon não configuradas corretamente para esta empresa.'
+                    ], 422);
+                }
+
+                return response()->json($result);
+            }
+
+            if ($marketplace === 'mercadolivre') {
+                $integracao = \App\Models\Integracao::where('empresa_id', $empresaId)
+                    ->where('marketplace', 'mercadolivre')
+                    ->where('ativo', true)
+                    ->first();
+
+                if (!$integracao) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Integração Mercado Livre não encontrada ou inativa para esta empresa.'
+                    ], 422);
+                }
+
+                $service = new \App\Services\MeliService();
+                $syncedCount = $service->syncAnuncios($integracao);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => "Sincronização Mercado Livre concluída: {$syncedCount} anúncios atualizados.",
+                    'synced' => $syncedCount,
+                ]);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Marketplace inválido para sincronização.'
+            ], 400);
+
+        } catch (\Exception $e) {
+            \Log::error("Erro na sincronização ({$marketplace}): " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro interno ao sincronizar: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     public function searchProducts(Request $request)

@@ -143,18 +143,12 @@ class ImportarNfeZipJob implements ShouldQueue
         }
 
         Notificacao::criar(
-            $tipo,
-            $titulo,
-            $mensagem,
-            route('fiscal.monitor'),
-            [
-                'tarefa_id' => null,
-                'log_path' => $logPath,
-                'log_filename' => $logFileName,
-                'sucesso' => $sucesso,
-                'falha' => $falha,
-            ],
-            $this->userId
+            (string) $tipo,
+            (string) $titulo,
+            (string) $mensagem,
+            (string) ($tipo === 'warning' ? 'warning' : 'success'),
+            (string) route('fiscal.monitor'),
+            (int) $this->userId
         );
     }
 
@@ -169,8 +163,8 @@ class ImportarNfeZipJob implements ShouldQueue
             'error',
             'Erro na Importação NF-e',
             'Ocorreu um erro ao processar os arquivos: '.$exception->getMessage(),
+            'danger',
             '/fiscal/monitor',
-            ['tarefa_id' => null],
             $this->userId
         );
     }

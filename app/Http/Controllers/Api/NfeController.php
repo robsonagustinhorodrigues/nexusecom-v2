@@ -366,37 +366,50 @@ class NfeController extends Controller
 
         try {
             $zip = new \ZipArchive;
-            $filePath = $request->file('zip')->getRealPath();
+            $uploadedPath = $request->file('zip')->store('nfes/uploads', 'local');
+            $fullPath = \Illuminate\Support\Facades\Storage::disk('local')->path($uploadedPath);
 
-            if ($zip->open($filePath) !== true) {
+            if ($zip->open($fullPath) !== true) {
                 return response()->json(['success' => false, 'message' => 'Não foi possível abrir o arquivo ZIP']);
             }
 
-            $fiscalService = new \App\Services\FiscalService;
-            $processed = 0;
+            $files = [];
             for ($i = 0; $i < $zip->numFiles; $i++) {
                 $fileName = $zip->getNameIndex($i);
 
-                if (substr($fileName, -1) === '/' || pathinfo($fileName, PATHINFO_EXTENSION) !== 'xml') {
+                if (substr($fileName, -1) === '/' || strtolower(pathinfo($fileName, PATHINFO_EXTENSION)) !== 'xml') {
                     continue;
                 }
 
-                $xmlContent = $zip->getFromIndex($i);
-                if ($xmlContent) {
-                    try {
-                        $fiscalService->importXml($xmlContent, $empresa->id);
-                        $processed++;
-                    } catch (\Exception $e) {
-                        \Log::error('Erro ao processar XML do ZIP: '.$e->getMessage());
-                    }
-                }
+                $files[] = [
+                    'type' => 'zip_content',
+                    'path' => $fullPath,
+                    'index' => $i,
+                    'name' => basename($fileName)
+                ];
             }
 
             $zip->close();
+            
+            $totalFiles = count($files);
+
+            if ($totalFiles > 0) {
+                \App\Jobs\ImportarNfeZipJob::dispatch(
+                    $empresa->id,
+                    auth()->id() ?? 1,
+                    'importacao_zip',
+                    $files
+                );
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Nenhum arquivo XML válido encontrado dentro do ZIP.',
+                ]);
+            }
 
             return response()->json([
                 'success' => true,
-                'message' => "{$processed} notas importadas com sucesso",
+                'message' => "{$totalFiles} notas enviadas para processamento em background",
             ]);
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => 'Erro: '.$e->getMessage()]);

@@ -225,9 +225,21 @@ class FiscalService
             $tipoNfe = $forcedTipo ?: $classificacao['categoria'];
             $tipoFiscal = $classificacao['tipo_fiscal'];
 
+            // Se já existe e está cancelada, não sobrescrever para aprovada
+            if ($statusNFe === 'aprovada') {
+                $existente = ($tipoNfe === 'emitida')
+                    ? NfeEmitida::where('chave', $chave)->where('empresa_id', $empresaId)->first()
+                    : NfeRecebida::where('chave', $chave)->where('empresa_id', $empresaId)->first();
+
+                $statusAtual = ($tipoNfe === 'emitida') ? $existente?->status : $existente?->status_nfe;
+                if ($statusAtual === 'cancelada') {
+                    $statusNFe = 'cancelada';
+                }
+            }
+
             // Salva ou Atualiza
             if ($tipoNfe === 'emitida') {
-                NfeEmitida::updateOrCreate(
+                $nota = NfeEmitida::updateOrCreate(
                     ['chave' => $chave, 'empresa_id' => $empresaId],
                     [
                         'numero' => $numero,
@@ -244,8 +256,10 @@ class FiscalService
                         'tp_nf' => $tpNF,
                     ]
                 );
+                
+                $this->processarItensNfe($content, $nota->id, null);
             } else {
-                NfeRecebida::updateOrCreate(
+                $nota = NfeRecebida::updateOrCreate(
                     ['chave' => $chave, 'empresa_id' => $empresaId],
                     [
                         'numero' => $numero,
@@ -267,6 +281,8 @@ class FiscalService
                         'tp_nf' => $tpNF,
                     ]
                 );
+
+                $this->processarItensNfe($content, null, $nota->id);
             }
 
             // Se é devolução, marcar a NF de origem como devolvida
@@ -725,7 +741,20 @@ class FiscalService
     {
         $itensSalvos = 0;
 
+        $empresa = null;
+        if ($nfeEmitidaId) {
+            $empresa = NfeEmitida::find($nfeEmitidaId)?->empresa;
+        } elseif ($nfeRecebidaId) {
+            $empresa = NfeRecebida::find($nfeRecebidaId)?->empresa;
+        }
+
         try {
+            if ($nfeEmitidaId) {
+                NfeItem::where('nfe_emitida_id', $nfeEmitidaId)->delete();
+            } elseif ($nfeRecebidaId) {
+                NfeItem::where('nfe_recebida_id', $nfeRecebidaId)->delete();
+            }
+
             $xml = simplexml_load_string($content);
             if (! $xml) {
                 return 0;
@@ -831,7 +860,7 @@ class FiscalService
                 
                 // Auto-associate product by SKU
                 $item = NfeItem::latest()->first();
-                if ($item) {
+                if ($item && $empresa && $empresa->grupo_id) {
                     $item->associateProduct($empresa->grupo_id);
                 }
                 

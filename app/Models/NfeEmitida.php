@@ -12,6 +12,10 @@ class NfeEmitida extends Model
     protected $table = 'nfe_emitidas';
 
     protected $fillable = [
+        'empresa_id',
+        'chave',
+        'numero',
+        'serie',
         'emitente_nome',
         'emitente_cnpj',
         'cliente_nome',
@@ -28,6 +32,8 @@ class NfeEmitida extends Model
         'nfe_devolucao_chave',
         'nfe_devolucao_numero',
         'nfe_devolucao_serie',
+        'protocolo_cancelamento',
+        'motivo_cancelamento',
     ];
 
     protected $casts = [

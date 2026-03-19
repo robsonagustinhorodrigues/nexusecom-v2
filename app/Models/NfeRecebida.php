@@ -30,6 +30,8 @@ class NfeRecebida extends Model
         'nfe_devolvida_chave',
         'nfe_devolvida_numero',
         'nfe_devolvida_serie',
+        'protocolo_cancelamento',
+        'motivo_cancelamento',
     ];
 
     protected function casts(): array

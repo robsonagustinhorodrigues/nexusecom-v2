@@ -11,10 +11,16 @@
             <h2 class="text-2xl font-black text-white tracking-tight italic uppercase">Monitor de Tarefas</h2>
             <p class="text-sm text-slate-400 italic underline decoration-indigo-500/50 decoration-2 underline-offset-4">Acompanhe o progresso das tarefas em background</p>
         </div>
-        <button @click="limparConcluidas()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-xl text-xs font-bold italic text-white flex items-center gap-2">
-            <i class="fas fa-broom"></i>
-            Limpar concluídas
-        </button>
+        <div class="flex gap-2">
+            <button @click="limparTodas()" class="px-4 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 rounded-xl text-xs font-bold italic flex items-center gap-2">
+                <i class="fas fa-trash-alt"></i>
+                Limpar Todas
+            </button>
+            <button @click="limparConcluidas()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-xl text-xs font-bold italic text-white flex items-center gap-2">
+                <i class="fas fa-broom"></i>
+                Limpar concluídas
+            </button>
+        </div>
     </div>
 
     <!-- Stats -->
@@ -107,10 +113,18 @@
                             </div>
                         </div>
 
-                        <!-- Error Details -->
-                        <div x-show="task.status === 'erro'" class="flex-shrink-0">
-                            <button @click="showError(task)" class="text-rose-400 hover:text-rose-300 text-xs">
-                                <i class="fas fa-exclamation-circle"></i> Ver erro
+                        <!-- Actions & Error Details -->
+                        <div class="flex items-center gap-3 flex-shrink-0">
+                            <div x-show="task.status === 'erro'">
+                                <button @click="showError(task)" class="text-rose-400 hover:text-rose-300 text-xs mr-2">
+                                    <i class="fas fa-exclamation-circle"></i> Ver erro
+                                </button>
+                            </div>
+                            <button x-show="['pending', 'processando'].includes(task.status)" @click="cancelarTarefa(task.id)" class="text-slate-400 hover:text-amber-400 text-xs transition" title="Cancelar Tarefa">
+                                <i class="fas fa-ban"></i>
+                            </button>
+                            <button x-show="!['processando'].includes(task.status)" @click="excluirTarefa(task.id)" class="text-slate-400 hover:text-rose-400 text-xs transition" title="Excluir Registro">
+                                <i class="fas fa-times"></i>
                             </button>
                         </div>
                     </div>
@@ -169,6 +183,39 @@ function tarefasPage() {
             if (!confirm('Limpar tarefas concluídas?')) return;
             try {
                 await fetch('/api/admin/tarefas/limpar', {
+                    method: 'DELETE',
+                    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }
+                });
+                await this.loadTasks();
+            } catch (e) { console.error(e); }
+        },
+
+        async limparTodas() {
+            if (!confirm('ATENÇÃO: Deseja apagar o registro de TODAS as tarefas?')) return;
+            try {
+                await fetch('/api/admin/tarefas/limpar-tudo', {
+                    method: 'DELETE',
+                    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }
+                });
+                await this.loadTasks();
+            } catch (e) { console.error(e); }
+        },
+
+        async cancelarTarefa(id) {
+            if (!confirm('Deseja cancelar esta tarefa?')) return;
+            try {
+                await fetch('/api/admin/tarefas/' + id + '/cancelar', {
+                    method: 'POST',
+                    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }
+                });
+                await this.loadTasks();
+            } catch (e) { console.error(e); }
+        },
+
+        async excluirTarefa(id) {
+            if (!confirm('Excluir este registro?')) return;
+            try {
+                await fetch('/api/admin/tarefas/' + id, {
                     method: 'DELETE',
                     headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }
                 });

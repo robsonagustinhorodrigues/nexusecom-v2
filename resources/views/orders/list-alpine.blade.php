@@ -166,21 +166,21 @@
                 <!-- Search -->
                 <div class="flex-1 min-w-[200px] relative group">
                     <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-indigo-500 transition-colors"></i>
-                    <input type="text" x-model="search" @input.debounce.300ms="loadOrders()" 
+                    <input type="text" x-model="search" @keyup.enter="loadOrders()" 
                         placeholder="Pesquisar venda, cliente ou produto..."
                         class="w-full bg-slate-900/50 border border-slate-700/50 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 focus:outline-none transition-all">
                 </div>
 
                 <!-- Date Range -->
                 <div class="flex items-center bg-slate-900/50 border border-slate-700/50 rounded-xl px-2 gap-2">
-                    <input type="date" x-model="dataDe" @change="loadOrders()" class="bg-transparent border-none py-2 text-xs text-slate-300 focus:ring-0 outline-none">
+                    <input type="date" x-model="dataDe" class="bg-transparent border-none py-2 text-xs text-slate-300 focus:ring-0 outline-none">
                     <span class="text-slate-600 font-bold text-[10px]">ATÉ</span>
-                    <input type="date" x-model="dataAte" @change="loadOrders()" class="bg-transparent border-none py-2 text-xs text-slate-300 focus:ring-0 outline-none">
+                    <input type="date" x-model="dataAte" class="bg-transparent border-none py-2 text-xs text-slate-300 focus:ring-0 outline-none">
                 </div>
 
                 <!-- Category Filters (Scrollable on small screens) -->
                 <div class="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 md:pb-0">
-                    <select x-model="status" @change="loadOrders()" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-300 focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none cursor-pointer">
+                    <select x-model="status" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-300 focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none cursor-pointer">
                         <option value="" class="bg-black">Status Pedido</option>
                         <option value="paid" class="bg-black">✅ Pago</option>
                         <option value="pending" class="bg-black">⏳ Pendente</option>
@@ -189,21 +189,21 @@
                         <option value="canceled" class="bg-black">❌ Cancelado</option>
                     </select>
 
-                    <select x-model="statusEnvio" @change="loadOrders()" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-400 focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none cursor-pointer">
+                    <select x-model="statusEnvio" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-400 focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none cursor-pointer">
                         <option value="" class="bg-black">Status Envio</option>
                         <option value="pending" class="bg-black">🟡 Aguardando</option>
                         <option value="shipped" class="bg-black">🔵 Enviado</option>
                         <option value="delivered" class="bg-black">🟢 Entregue</option>
                     </select>
 
-                    <select x-model="logistics" @change="loadOrders()" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-400 focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none cursor-pointer">
+                    <select x-model="logistics" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-400 focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none cursor-pointer">
                         <option value="" class="bg-black">Logística</option>
                         <option value="me2" class="bg-black">Mercado Envios</option>
                         <option value="fulfillment" class="bg-black">🚀 Full</option>
                         <option value="classic" class="bg-black">🚚 Classic</option>
                     </select>
 
-                    <select x-model="marketplace" @change="loadOrders()" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-400 focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none cursor-pointer">
+                    <select x-model="marketplace" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-400 focus:ring-2 focus:ring-indigo-500/50 outline-none appearance-none cursor-pointer">
                         <option value="" class="bg-black">Marketplace</option>
                         <option value="mercadolivre" class="bg-black">🤝 Meli</option>
                         <option value="amazon" class="bg-black">📦 Amazon</option>
@@ -214,7 +214,7 @@
                 <!-- Sort -->
                 <div class="flex items-center bg-black border border-slate-700/50 rounded-xl px-3 h-[42px] gap-2">
                     <i class="fas fa-sort text-slate-500 text-xs"></i>
-                    <select x-model="sortBy" @change="loadOrders()" class="bg-transparent border-none py-0 text-xs text-white font-bold focus:ring-0 outline-none cursor-pointer">
+                    <select x-model="sortBy" class="bg-transparent border-none py-0 text-xs text-white font-bold focus:ring-0 outline-none cursor-pointer">
                         <option value="data_compra" class="bg-black border-none">📅 Data</option>
                         <option value="valor_total" class="bg-black border-none">💰 Valor</option>
                         <option value="lucro" class="bg-black border-none">📈 Lucro</option>
@@ -224,6 +224,13 @@
                         <i class="fas" :class="sortDir === 'asc' ? 'fa-sort-up' : 'fa-sort-down'"></i>
                     </button>
                 </div>
+
+                <!-- Filter Button -->
+                <button @click="loadOrders()" 
+                    class="bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-500/50 rounded-xl px-4 py-2 text-sm font-bold flex items-center gap-2 transition-all shadow-lg active:scale-95 whitespace-nowrap h-[42px]">
+                    <i class="fas fa-filter"></i>
+                    <span>Filtrar</span>
+                </button>
             </div>
 
             <!-- Selection Overlay (Active when orders are selected) -->

@@ -35,24 +35,24 @@
         </div>
 
         <template x-for="notif in notifications" :key="notif.id">
-            <div class="p-4 border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors" :class="notif.read ? 'opacity-60' : ''">
+            <div class="p-4 border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors" :class="notif.lida ? 'opacity-60' : ''">
                 <div class="flex items-start gap-4">
                     <!-- Ícone -->
                     <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                         :class="getIconClass(notif.type)">
-                        <i :class="getIcon(notif.type)"></i>
+                         :class="getIconClass(notif.tipo || notif.cor)">
+                        <i :class="getIcon(notif.tipo || notif.cor)"></i>
                     </div>
 
                     <!-- Conteúdo -->
                     <div class="flex-1 min-w-0">
                         <div class="flex items-start justify-between gap-2">
                             <div>
-                                <p class="font-bold text-white text-sm" x-text="notif.title"></p>
-                                <p class="text-slate-400 text-xs mt-1" x-text="notif.message"></p>
+                                <p class="font-bold text-white text-sm" x-text="notif.titulo"></p>
+                                <p class="text-slate-400 text-xs mt-1" x-text="notif.mensagem"></p>
                             </div>
                             <div class="flex items-center gap-2 flex-shrink-0">
                                 <span class="text-[10px] text-slate-500" x-text="formatDate(notif.created_at)"></span>
-                                <button @click="deleteNotif(notif.id)" class="text-slate-600 hover:text-rose-400 transition-colors">
+                                <button @click="deleteNotif(notif.id)" class="text-slate-600 hover:text-rose-400 transition-colors cursor-pointer" title="Excluir">
                                     <i class="fas fa-times text-xs"></i>
                                 </button>
                             </div>

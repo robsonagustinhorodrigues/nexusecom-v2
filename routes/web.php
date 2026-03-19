@@ -178,6 +178,24 @@ Route::middleware(['auth'])->group(function () {
         return response()->json(['success' => true]);
     });
 
+    Route::post('/api/admin/tarefas/{id}/cancelar', function ($id) {
+        $tarefa = \App\Models\Tarefa::findOrFail($id);
+        if ($tarefa->cancelar()) {
+            return response()->json(['success' => true]);
+        }
+        return response()->json(['success' => false, 'message' => 'Tarefa não pode ser cancelada.'], 400);
+    });
+
+    Route::delete('/api/admin/tarefas/{id}', function ($id) {
+        \App\Models\Tarefa::findOrFail($id)->delete();
+        return response()->json(['success' => true]);
+    });
+
+    Route::delete('/api/admin/tarefas/limpar-tudo', function () {
+        \App\Models\Tarefa::query()->delete();
+        return response()->json(['success' => true]);
+    });
+
     Route::get('/roadmap', function () {
         $phases = (new \App\Livewire\Admin\Roadmap)->phases;
 
@@ -203,6 +221,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/fiscal/relatorio/simples', function () {
         return redirect('/fiscal/nfe');
     })->name('fiscal.relatorio.simples');
+    Route::get('/fiscal/relatorio/ncm', [\App\Http\Controllers\RelatorioNcmController::class, 'index'])->name('fiscal.relatorio.ncm');
 
     // Integration routes
     Route::get('/integrations/parceiros', function () {
@@ -298,6 +317,7 @@ Route::prefix('api')->middleware('auth')->group(function () {
     Route::post('/nfes/import', [App\Http\Controllers\Api\NfeController::class, 'import']);
     Route::post('/nfes/import-meli', [App\Http\Controllers\Api\NfeController::class, 'importMeli']);
     Route::post('/nfes/import-xml', [App\Http\Controllers\Api\NfeController::class, 'importXml']);
+    Route::post('/nfes/import-zip', [App\Http\Controllers\Api\NfeController::class, 'importZip']);
     Route::post('/nfes/import-bling', [App\Http\Controllers\Api\NfeController::class, 'importBling']);
     Route::post('/nfes/reprocess-association', [App\Http\Controllers\Api\NfeController::class, 'reprocessAssociation']);
     Route::post('/api/nfe/import/meli', [App\Http\Controllers\Api\NfeController::class, 'importMeli']);
@@ -311,6 +331,9 @@ Route::prefix('api')->middleware('auth')->group(function () {
     Route::delete('/estoque/depositos/{id}', [App\Http\Controllers\Api\EstoqueController::class, 'destroyDeposito']);
     Route::get('/estoque/{id}', [App\Http\Controllers\Api\EstoqueController::class, 'show']);
     Route::put('/estoque/{id}', [App\Http\Controllers\Api\EstoqueController::class, 'update']);
+
+    // Relatorios
+    Route::get('/relatorio-ncm', [\App\Http\Controllers\RelatorioNcmController::class, 'getData']);
 });
 
 // API Routes
