@@ -1,0 +1,21 @@
+
+   Illuminate\Database\QueryException 
+
+  SQLSTATE[08006] [7] connection to server at "177.170.10.220", port 8281 failed: timeout expired (Connection: pgsql, SQL: select * from "cache" where "key" in (nexusecom_cache_illuminate:queue:restart))
+
+  at vendor/laravel/framework/src/Illuminate/Database/Connection.php:825
+    821▕                     $this->getName(), $query, $this->prepareBindings($bindings), $e
+    822▕                 );
+    823▕             }
+    824▕ 
+  ➜ 825▕             throw new QueryException(
+    826▕                 $this->getName(), $query, $this->prepareBindings($bindings), $e
+    827▕             );
+    828▕         }
+    829▕     }
+
+      [2m+37 vendor frames [22m
+
+  38  artisan:13
+      Illuminate\Foundation\Application::handleCommand()
+

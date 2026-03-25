@@ -333,20 +333,23 @@
                     <div class="w-full lg:w-[180px] flex-shrink-0 flex flex-col justify-between gap-3">
                         <!-- LINK STATUS -->
                         <div class="flex-1 flex flex-col justify-center">
-                            <template x-if="anuncio.produto">
+                            <template x-if="anuncio.product_linked">
                                 <div class="flex flex-col gap-1.5">
-                                    <div class="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                                    <div class="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/20 border border-emerald-500/30 rounded-xl">
                                         <i class="fas fa-link text-emerald-500 text-xs"></i>
                                         <span class="text-[10px] font-black text-emerald-400 uppercase tracking-wider">Vinculado</span>
                                     </div>
-                                    <p class="text-[10px] text-slate-500 italic px-1 truncate" x-text="anuncio.produto.nome"></p>
+                                    <div class="px-1 flex flex-col">
+                                        <p class="text-[10px] text-slate-300 font-bold truncate" x-text="anuncio.product_nome"></p>
+                                        <p class="text-[9px] text-indigo-400 font-mono font-bold uppercase" x-text="'SKU: ' + (anuncio.product_sku || 'N/A')"></p>
+                                    </div>
                                 </div>
                             </template>
-                            <template x-if="!anuncio.produto">
+                            <template x-if="!anuncio.product_linked">
                                 <button @click="showVincularModal = true; anuncioSelecionado = anuncio"
-                                    class="w-full flex items-center justify-center gap-2 px-3 py-2 bg-slate-700/30 border border-slate-600/50 rounded-xl hover:bg-yellow-500/10 hover:border-yellow-500/50 transition-all group/vincular shadow-sm">
-                                    <i class="fas fa-unlink text-slate-600 group-hover:text-yellow-500 text-xs animate-pulse"></i>
-                                    <span class="text-[10px] font-black text-slate-500 group-hover:text-yellow-400 uppercase tracking-wider">Vincular</span>
+                                    class="w-full flex items-center justify-center gap-2 px-3 py-2 bg-yellow-500/10 border border-yellow-500/30 rounded-xl hover:bg-yellow-500/20 hover:border-yellow-500/50 transition-all group/vincular shadow-sm">
+                                    <i class="fas fa-link text-yellow-500 text-xs animate-pulse"></i>
+                                    <span class="text-[10px] font-black text-yellow-500 uppercase tracking-wider">Vincular</span>
                                 </button>
                             </template>
                         </div>
@@ -549,46 +552,28 @@
                             <div class="flex items-center justify-center gap-1">
                                 <template x-if="anuncio.product_linked">
                                     <div class="flex items-center gap-1">
-                                        <span class="text-xs bg-indigo-500/20 text-indigo-400 px-2 py-1 rounded" title="SKU">
-                                            <i class="fas fa-barcode text-[10px] mr-1"></i><span x-text="anuncio.product_sku || 'N/A'"></span>
-                                        </span>
-                                        <button @click="openVincular(anuncio)" class="p-1 rounded text-amber-400 hover:bg-amber-500/10" title="Trocar">
-                                            <i class="fas fa-exchange-alt text-[10px]"></i>
-                                        </button>
-                                        <button @click="desvincularProduto(anuncio)" class="p-1 rounded text-red-400 hover:bg-red-500/10" title="Desvincular">
-                                            <i class="fas fa-unlink text-[10px]"></i>
-                                        </button>
+                                        <div class="flex flex-col items-center">
+                                            <span class="text-[10px] bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded font-mono font-bold mb-1" x-text="anuncio.product_sku || 'N/A'"></span>
+                                            <div class="flex items-center gap-1">
+                                                <button @click="openVincular(anuncio)" class="p-1.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 transition-all" title="Trocar Vínculo">
+                                                    <i class="fas fa-link text-xs"></i>
+                                                </button>
+                                                <button @click="desvincularProduto(anuncio)" class="p-1.5 rounded text-red-400 hover:bg-red-500/10" title="Desvincular">
+                                                    <i class="fas fa-unlink text-xs"></i>
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
                                 </template>
-                                <template x-if="anuncio.is_catalog && anuncio.marketplace === 'mercadolivre'">
-                                    <div class="flex items-center justify-center gap-1">
-                                        <button @click="openRepricer(anuncio)" class="p-1.5 rounded text-indigo-400 hover:bg-indigo-500/10" title="Configurar Repricer">
-                                            <i class="fas fa-robot text-xs"></i>
+                                <template x-if="!anuncio.product_linked">
+                                    <div class="flex flex-col items-center gap-1">
+                                        <button @click="openVincular(anuncio)" class="p-1.5 rounded bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/30 transition-all" title="Vincular a Produto">
+                                            <i class="fas fa-link text-xs animate-pulse"></i>
                                         </button>
-                                        <template x-if="anuncio.json_data.catalog_product_id">
-                                            <a :href="'https://www.mercadolivre.com.br/' + anuncio.slug + '/p/' + anuncio.json_data.catalog_product_id + '/s?'" 
-                                               target="_blank"
-                                               class="p-1.5 rounded text-indigo-400 hover:bg-indigo-500/10" 
-                                               title="Ver Concorrentes (MLB)">
-                                                <i class="fas fa-users-viewfinder text-xs"></i>
-                                            </a>
-                                        </template>
-                                    </div>
-                                </template>
-                                <template x-if="!anuncio.product_linked && !anuncio.produto_id">
-                                    <div class="flex items-center justify-center gap-1">
-                                        <button @click="importAsProduct(anuncio)" class="p-1.5 rounded text-emerald-400 hover:bg-emerald-500/10" title="Importar como Produto">
-                                            <i class="fas fa-plus text-xs"></i>
-                                        </button>
-                                        <button @click="openVincular(anuncio)" class="p-1.5 rounded text-amber-400 hover:bg-amber-500/10" title="Vincular a Produto">
-                                            <i class="fas fa-link text-xs"></i>
+                                        <button @click="importAsProduct(anuncio)" class="text-[9px] text-emerald-500 hover:text-emerald-400 font-bold uppercase tracking-tighter" title="Importar como Novo Produto">
+                                            + Importar
                                         </button>
                                     </div>
-                                </template>
-                                <template x-if="!anuncio.product_linked && anuncio.produto_id">
-                                    <button @click="openVincular(anuncio)" class="p-1.5 rounded text-amber-400 hover:bg-amber-500/10" title="Vincular a Produto">
-                                        <i class="fas fa-link text-xs"></i>
-                                    </button>
                                 </template>
                             </div>
                         </td>

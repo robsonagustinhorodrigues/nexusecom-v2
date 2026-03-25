@@ -88,22 +88,10 @@ Route::middleware(['auth'])->group(function () {
         return redirect('/fiscal/nfe');
     })->name('fiscal.monitor');
 
-    // OLD routes - Livewire (backup)
-    Route::prefix('_old')->group(function () {
-        Route::get('/dashboard', \App\Livewire\Dashboard::class);
-        Route::get('/products', \App\Livewire\Products\Index::class);
-        Route::get('/products/create', \App\Livewire\Products\Create::class);
-        Route::get('/products/edit/{id}', \App\Livewire\Products\Create::class);
-        Route::get('/orders', \App\Livewire\Orders\Index::class);
-        Route::get('/anuncios', \App\Livewire\Integrations\Anuncios::class);
-        Route::get('/estoque', \App\Livewire\Estoque\Dashboard::class);
-    });
-
     // Other routes that still work
     Route::get('/integrations', function () {
         return view('admin.integrations-alpine');
     })->name('integrations.index');
-    Route::get('/integrations/anuncios', \App\Livewire\Integrations\Anuncios::class)->name('integrations.anuncios');
 
     // Admin routes
     Route::get('/admin/empresas', function () {
@@ -139,7 +127,15 @@ Route::middleware(['auth'])->group(function () {
     });
 
     Route::post('/api/admin/notificacoes/marcar-lida', function () {
-        \App\Models\Notificacao::where('user_id', auth()->id())->update(['read' => true]);
+        \App\Models\Notificacao::where('user_id', auth()->id())->update(['lida' => true]);
+
+        return response()->json(['success' => true]);
+    });
+
+    Route::post('/api/admin/notificacoes/{id}/marcar-lida', function ($id) {
+        \App\Models\Notificacao::where('user_id', auth()->id())
+            ->where('id', $id)
+            ->update(['lida' => true]);
 
         return response()->json(['success' => true]);
     });
@@ -222,6 +218,7 @@ Route::middleware(['auth'])->group(function () {
         return redirect('/fiscal/nfe');
     })->name('fiscal.relatorio.simples');
     Route::get('/fiscal/relatorio/ncm', [\App\Http\Controllers\RelatorioNcmController::class, 'index'])->name('fiscal.relatorio.ncm');
+    Route::get('/fiscal/relatorio/ncm/export', [\App\Http\Controllers\RelatorioNcmController::class, 'exportPdf'])->name('fiscal.relatorio.ncm.export');
 
     // Integration routes
     Route::get('/integrations/parceiros', function () {
@@ -446,5 +443,22 @@ Route::post('/logout', function () {
 
     return redirect('/login');
 })->name('logout');
+
+// Amazon Ads Automator Routes
+Route::middleware(['auth'])->group(function () {
+    Route::get('/amazon-ads/dashboard', [App\Http\Controllers\AmazonAdsWebController::class, 'index'])->name('amazon-ads.dashboard');
+    Route::get('/amazon-ads/settings', [App\Http\Controllers\AmazonAdsWebController::class, 'settings'])->name('amazon-ads.settings');
+
+    Route::prefix('api/amazon-ads')->group(function () {
+        Route::get('/config', [App\Http\Controllers\Api\AmazonAdsController::class, 'getConfig']);
+        Route::post('/config', [App\Http\Controllers\Api\AmazonAdsController::class, 'saveConfig']);
+        Route::get('/sku-configs', [App\Http\Controllers\Api\AmazonAdsController::class, 'getSkuConfigs']);
+        Route::post('/sku-configs', [App\Http\Controllers\Api\AmazonAdsController::class, 'saveSkuConfig']);
+        Route::get('/listings/search', [App\Http\Controllers\Api\AmazonAdsController::class, 'searchListings']);
+        Route::post('/ai/suggestions', [App\Http\Controllers\Api\AmazonAdsController::class, 'generateAiSuggestions']);
+        Route::get('/campaigns', [App\Http\Controllers\Api\AmazonAdsController::class, 'listCampaigns']);
+        Route::post('/campaigns/sync', [App\Http\Controllers\Api\AmazonAdsController::class, 'syncCampaigns']);
+    });
+});
 
 require __DIR__.'/auth.php';

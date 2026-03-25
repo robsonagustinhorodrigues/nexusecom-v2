@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Schedule;
 Schedule::call(function () {
     Empresa::where('ativo', true)
         ->whereNotNull('certificado_a1_path')
-        ->each(fn ($empresa) => BuscarNfeJob::dispatch($empresa));
+        ->each(fn ($empresa) => BuscarNfeJob::dispatch($empresa->id, 1));
 })->everySixHours();
 
 // Repricer - a cada 3 horas para empresas habilitadas

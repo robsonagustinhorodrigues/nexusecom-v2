@@ -7,6 +7,8 @@
     "license": "MIT",
     "require": {
         "php": "^8.2",
+        "google-gemini-php/laravel": "^2.0",
+        "google/cloud-ai-platform": "^1.54",
         "inertiajs/inertia-laravel": "^2.0",
         "jlevers/selling-partner-api": "^7.4",
         "laravel/framework": "^11.31",
@@ -14,6 +16,7 @@
         "livewire/livewire": "^3.6.4",
         "livewire/volt": "^1.7.0",
         "maatwebsite/excel": "^3.1",
+        "masbug/flysystem-google-drive-ext": "^2.4",
         "nfephp-org/sped-da": "^1.1",
         "nfephp-org/sped-nfe": "^5.2",
         "picqer/php-barcode-generator": "^2.2",

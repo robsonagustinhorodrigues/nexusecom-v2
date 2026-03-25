@@ -17,12 +17,22 @@
                 <p class="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] ml-5">Resumo financeiro por NCM</p>
             </div>
             
-            <!-- Generate Button -->
-            <button @click="loadData()" :disabled="loading"
-                    class="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all shadow-lg active:scale-95 disabled:opacity-50 flex items-center gap-2">
-                <i class="fas fa-search" :class="loading ? 'fa-spin' : ''"></i>
-                <span x-text="loading ? 'Gerando...' : 'Gerar Relatório'"></span>
-            </button>
+            <!-- Buttons Group -->
+            <div class="flex items-center gap-3">
+                <!-- Export PDF Button -->
+                <button @click="exportPdf()" :disabled="loading || data.length === 0"
+                        class="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-bold transition-all shadow-lg active:scale-95 disabled:opacity-50 flex items-center gap-2">
+                    <i class="fas fa-file-pdf"></i>
+                    <span>Exportar PDF</span>
+                </button>
+
+                <!-- Generate Button -->
+                <button @click="loadData()" :disabled="loading"
+                        class="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all shadow-lg active:scale-95 disabled:opacity-50 flex items-center gap-2">
+                    <i class="fas fa-search" :class="loading ? 'fa-spin' : ''"></i>
+                    <span x-text="loading ? 'Gerando...' : 'Gerar Relatório'"></span>
+                </button>
+            </div>
         </div>
 
         <!-- Filters & Control Bar -->
@@ -46,7 +56,7 @@
         </div>
 
         <!-- Stats Bar -->
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4" x-show="summary !== null" x-cloak>
+        <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mt-4" x-show="summary !== null" x-cloak>
             <div class="bg-gradient-to-br from-emerald-600/20 to-transparent border border-emerald-500/20 rounded-2xl p-4 shadow-xl backdrop-blur-sm group">
                 <div class="flex items-center justify-between mb-2">
                     <span class="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Total Compras</span>
@@ -77,6 +87,14 @@
                     <i class="fas fa-undo text-orange-500 group-hover:scale-110 transition-transform"></i>
                 </div>
                 <div class="text-2xl font-black text-white" x-text="formatMoney(summary.devolvida_total)"></div>
+            </div>
+
+            <div class="bg-gradient-to-br from-indigo-600/20 to-transparent border border-indigo-500/20 rounded-2xl p-4 shadow-xl backdrop-blur-sm group">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Total Líquido</span>
+                    <i class="fas fa-calculator text-indigo-500 group-hover:scale-110 transition-transform"></i>
+                </div>
+                <div class="text-2xl font-black text-white" x-text="formatMoney(summary.liquido_total)"></div>
             </div>
         </div>
     </div>
@@ -145,7 +163,8 @@ function relatorioNcm() {
             venda_total: 0,
             compra_total: 0,
             cancelada_total: 0,
-            devolvida_total: 0
+            devolvida_total: 0,
+            liquido_total: 0
         },
 
         async init() {
@@ -194,6 +213,18 @@ function relatorioNcm() {
                 console.error('Erro ao carregar relatório:', e);
             }
             this.loading = false;
+        },
+
+        exportPdf() {
+            if (!this.dataInicio || !this.dataFim || !this.empresaId) return;
+            
+            const params = new URLSearchParams({
+                empresa_id: this.empresaId,
+                data_inicial: this.dataInicio,
+                data_final: this.dataFim
+            });
+            
+            window.open(`/fiscal/relatorio/ncm/export?${params}`, '_blank');
         },
 
         formatMoney(value) {

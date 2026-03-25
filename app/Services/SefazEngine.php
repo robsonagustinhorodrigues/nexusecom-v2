@@ -461,50 +461,25 @@ class SefazEngine
 
     private function processarCompleta($xmlContent, Empresa $empresa)
     {
-        $xml = simplexml_load_string($xmlContent);
-        if (! $xml) {
-            return;
-        }
+        try {
+            $xml = simplexml_load_string($xmlContent);
+            if (! $xml) {
+                return;
+            }
 
-        $infNFe = $xml->NFe->infNFe;
-        $chNFe = preg_replace('/[^0-9]/', '', (string) $infNFe->attributes()->Id);
-        $emitCnpj = (string) ($infNFe->emit->CNPJ ?: $infNFe->emit->CPF);
-        $destCnpj = (string) ($infNFe->dest->CNPJ ?: $infNFe->dest->CPF);
-        $tpNF = (int) ($infNFe->ide->tpNF ?? 1);
+            $infNFe = $xml->NFe->infNFe ?? $xml->infNFe;
+            if (!$infNFe) {
+                return;
+            }
+            
+            $chNFe = preg_replace('/[^0-9]/', '', (string)$infNFe->attributes()->Id);
+            $nomeArquivo = "sefaz_completa_{$chNFe}.xml";
 
-        // Determina se é nota de entrada ou saída
-        $tipoNfe = $this->verificarTipoNfe($chNFe, $empresa, $tpNF, $emitCnpj, $destCnpj);
-
-        $path = $tipoNfe === 'emitida' 
-            ? 'nfes/emitidas/'.date('Y/m')."/{$chNFe}.xml"
-            : 'nfes/recebidas/'.date('Y/m')."/{$chNFe}.xml";
-        Storage::put($path, $xmlContent);
-
-        if ($tipoNfe === 'emitida') {
-            NfeEmitida::updateOrCreate(
-                ['chave' => $chNFe, 'empresa_id' => $empresa->id],
-                [
-                    'numero' => (string) $infNFe->ide->nNF,
-                    'serie' => (string) ($infNFe->ide->serie ?? 1),
-                    'valor_total' => (float) $infNFe->total->ICMSTot->vNF,
-                    'emitente_cnpj' => (string) ($infNFe->emit->CNPJ ?: $infNFe->emit->CPF),
-                    'emitente_nome' => (string) $infNFe->emit->xNome,
-                    'xml_path' => $path,
-                    'status' => 'autorizada',
-                ]
-            );
-        } else {
-            NfeRecebida::updateOrCreate(
-                ['chave' => $chNFe, 'empresa_id' => $empresa->id],
-                [
-                    'numero' => (string) $infNFe->ide->nNF,
-                    'serie' => (string) $infNFe->ide->serie,
-                    'valor_total' => (float) $infNFe->total->ICMSTot->vNF,
-                    'emitente_cnpj' => (string) ($infNFe->emit->CNPJ ?: $infNFe->emit->CPF),
-                    'emitente_nome' => (string) $infNFe->emit->xNome,
-                    'xml_path' => $path,
-                ]
-            );
+            $fiscalService = app(\App\Services\FiscalService::class);
+            $fiscalService->importXml($xmlContent, $empresa->id, $nomeArquivo);
+            Log::info("DEBUG SEFAZ - NF-e Completa {$chNFe} importada com sucesso via FiscalService.");
+        } catch (\Exception $e) {
+            Log::error("DEBUG SEFAZ - Erro ao importar NF-e Completa via FiscalService: " . $e->getMessage());
         }
     }
 
@@ -560,48 +535,52 @@ class SefazEngine
      */
     private function processarEventoCompleto($xmlContent, Empresa $empresa)
     {
-        $xml = simplexml_load_string($xmlContent);
-        if (! $xml) {
-            return;
-        }
+        try {
+            $xml = simplexml_load_string($xmlContent);
+            if (! $xml) {
+                return;
+            }
 
-        // Extrai a chave da NFe do evento
-        $chNFe = '';
-        if (isset($xml->evento->infEvent->chNFe)) {
-            $chNFe = (string) $xml->evento->infEvent->chNFe;
-        } elseif (isset($xml->procEvento->evento->infEvent->chNFe)) {
-            $chNFe = (string) $xml->procEvento->evento->infEvent->chNFe;
-        }
+            // Extrai a chave da NFe do evento
+            $chNFe = '';
+            if (isset($xml->evento->infEvent->chNFe)) {
+                $chNFe = (string) $xml->evento->infEvent->chNFe;
+            } elseif (isset($xml->procEvento->evento->infEvent->chNFe)) {
+                $chNFe = (string) $xml->procEvento->evento->infEvent->chNFe;
+            }
 
-        if (empty($chNFe)) {
-            Log::warning("Evento sem chave NFe encontrada");
-            return;
-        }
+            if (empty($chNFe)) {
+                Log::warning("Evento sem chave NFe encontrada");
+                return;
+            }
 
-        $tpEvento = isset($xml->evento->infEvent->tpEvento) ? (string) $xml->evento->infEvent->tpEvento : '';
-        $dhEvento = isset($xml->evento->infEvent->dhEvento) ? (string) $xml->evento->infEvent->dhEvento : now();
+            $tpEvento = isset($xml->evento->infEvent->tpEvento) ? (string) $xml->evento->infEvent->tpEvento : '';
+            $dhEvento = isset($xml->evento->infEvent->dhEvento) ? (string) $xml->evento->infEvent->dhEvento : now();
+            
+            $nomeArquivo = "sefaz_evento_{$chNFe}_{$tpEvento}.xml";
 
-        // Salva o XML do evento
-        $path = 'eventos/'.date('Y/m')."/{$chNFe}_{$tpEvento}.xml";
-        Storage::put($path, $xmlContent);
+            $fiscalService = app(\App\Services\FiscalService::class);
+            $fiscalService->importXml($xmlContent, $empresa->id, $nomeArquivo);
+            Log::info("DEBUG SEFAZ - Evento Completo {$chNFe} importado com sucesso via FiscalService.");
 
-        Log::info("Processando evento completo: {$tpEvento} para NFe {$chNFe}");
+            // Atualiza o status de manifestação na NFe
+            $nfe = NfeRecebida::where('chave', $chNFe)->where('empresa_id', $empresa->id)->first();
+            
+            if ($nfe) {
+                $status = $nfe->status_manifestacao;
+                if ($tpEvento === '210200') $status = 'ciencia_operacao';
+                if ($tpEvento === '210210') $status = 'confirmada';
+                if ($tpEvento === '210220') $status = 'nao_realizada';
+                if ($tpEvento === '210240') $status = 'desconhecida';
+                if ($tpEvento === '110111') $status = 'cancelada';
 
-        // Atualiza o status de manifestação na NFe
-        $nfe = NfeRecebida::where('chave', $chNFe)->where('empresa_id', $empresa->id)->first();
-        
-        if ($nfe) {
-            $status = $nfe->status_manifestacao;
-            if ($tpEvento === '210200') $status = 'ciencia_operacao';
-            if ($tpEvento === '210210') $status = 'confirmada';
-            if ($tpEvento === '210220') $status = 'nao_realizada';
-            if ($tpEvento === '210240') $status = 'desconhecida';
-            if ($tpEvento === '110111') $status = 'cancelada';
-
-            $nfe->update([
-                'status_manifestacao' => $status,
-                'data_manifestacao' => \Carbon\Carbon::parse($dhEvento),
-            ]);
+                $nfe->update([
+                    'status_manifestacao' => $status,
+                    'data_manifestacao' => \Carbon\Carbon::parse($dhEvento),
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::error("DEBUG SEFAZ - Erro ao importar Evento Completo via FiscalService: " . $e->getMessage());
         }
     }
 

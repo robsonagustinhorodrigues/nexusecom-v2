@@ -61,6 +61,11 @@
                     <span x-show="sidebarOpen" x-transition>Integrações</span>
                 </a>
 
+                <a href="{{ route('amazon-ads.dashboard') }}" class="flex items-center gap-3 px-3 py-2 {{ request()->routeIs('amazon-ads.*') ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-800' }} rounded-xl font-bold transition-all shadow-sm">
+                    <i class="fas fa-robot w-6 text-center"></i>
+                    <span x-show="sidebarOpen" x-transition>Amazon Ads</span>
+                </a>
+
                 <a href="{{ route('admin.usuarios') }}" class="flex items-center gap-3 px-3 py-2 {{ request()->routeIs('admin.usuarios') ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-800' }} rounded-xl font-bold transition-all shadow-sm">
                     <i class="fas fa-users w-6 text-center"></i>
                     <span x-show="sidebarOpen" x-transition>Equipe</span>
