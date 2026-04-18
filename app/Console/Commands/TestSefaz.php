@@ -9,7 +9,7 @@ use App\Services\SefazEngine;
 class TestSefaz extends Command
 {
     protected $signature = 'test:sefaz {empresa_id}';
-    protected $description = 'Test Sefaz Import';
+    protected $description = 'Busca 1 lote de NF-es no SEFAZ (max 50 docs). Repita a cada hora para avançar a fila.';
 
     public function handle(SefazEngine $sefaz)
     {
@@ -21,12 +21,24 @@ class TestSefaz extends Command
             return;
         }
 
-        $this->info("Iniciando busca para: {$empresa->nome}");
+        $currentNsu = $empresa->last_nsu ?? 0;
+        $this->info("Empresa: {$empresa->nome}");
+        $this->info("NSU atual: {$currentNsu}");
 
         try {
-            $result = $sefaz->buscarNovasNotas($empresa);
-            $this->info("Resultado:");
-            print_r($result);
+            $result = $sefaz->buscarPorNsu($empresa, $currentNsu);
+
+            $this->info("✅ Lote processado: {$result['count']} documentos");
+            $this->info("📍 NSU salvo: {$result['lastNsu']}");
+            $this->info("📊 Limite global SEFAZ: {$result['maxNsu']}");
+
+            if ($result['hasMore']) {
+                $restantes = $result['maxNsu'] - $result['lastNsu'];
+                $this->warn("⏳ Ainda há {$restantes} NSUs na fila. Aguarde 1 hora e rode novamente!");
+            } else {
+                $this->info("✅ Fila da SEFAZ esgotada!");
+            }
+
         } catch (\Exception $e) {
             $this->error("Erro: " . $e->getMessage());
         }

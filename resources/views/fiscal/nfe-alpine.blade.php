@@ -1034,8 +1034,8 @@ function fiscalPage() {
                     alert('Erro: ' + (data.message || 'Erro desconhecido'));
                 }
             } catch (e) {
-                console.error(e);
-                alert('Erro ao importar arquivo. Verifique se o arquivo não excede o limite do servidor.');
+                console.error('Erro detalhado:', e);
+                alert('Erro na requisição. Verifique o console do navegador (F12) para detalhes.');
             }
             this.importing = false;
             // Clear input so same file can be selected again if needed

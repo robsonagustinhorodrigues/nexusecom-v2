@@ -48,7 +48,7 @@ class ImportarNFeMeliJob implements ShouldQueue
             Log::info("Iniciando importação de NF-es do Mercado Livre para empresa: {$this->empresa->nome}");
             
             if ($tarefa) {
-                $tarefa->update(['status' => 'processando', 'progresso' => 10]);
+                $tarefa->update(['status' => 'processando', 'processado' => 1]);
             }
 
             $result = $meliService->execute($this->empresa, $this->dataInicio, $this->dataFim);
@@ -57,13 +57,13 @@ class ImportarNFeMeliJob implements ShouldQueue
                 if (!empty($result['errors'])) {
                     $tarefa->update([
                         'status' => 'erro',
-                        'progresso' => 100,
-                        'erro' => implode(', ', $result['errors'])
+                        'processado' => 1,
+                        'mensagem' => implode(', ', $result['errors'])
                     ]);
                 } else {
                     $tarefa->update([
                         'status' => 'concluido',
-                        'progresso' => 100,
+                        'processado' => 1,
                         'resultado' => json_encode($result)
                     ]);
                 }
@@ -77,8 +77,8 @@ class ImportarNFeMeliJob implements ShouldQueue
             if ($tarefa) {
                 $tarefa->update([
                     'status' => 'erro',
-                    'progresso' => 0,
-                    'erro' => $e->getMessage()
+                    'processado' => 0,
+                    'mensagem' => $e->getMessage()
                 ]);
             }
         }

@@ -298,9 +298,9 @@ class NfeController extends Controller
                 'empresa_id' => $empresa->id,
                 'user_id' => $userId,
                 'tipo' => 'import_nfe_meli',
-                'descricao' => "Importar NF-es do Mercado Livre de {$request->data_inicio} até {$request->data_fim}",
+                'mensagem' => "Importar NF-es do Mercado Livre de {$request->data_inicio} até {$request->data_fim}",
                 'status' => 'processando',
-                'progresso' => 0,
+                'total' => 1,
             ]);
 
             // Dispatch job para processar em background
@@ -333,18 +333,30 @@ class NfeController extends Controller
         }
 
         try {
-            $xmlContent = file_get_contents($request->file('xml')->getRealPath());
+            // Salva arquivo temporário para o Job processar
+            $uploadedPath = $request->file('xml')->store('nfes/uploads', 'local');
+            
+            // Cria tarefa para rastreamento
+            $userId = auth()->id() ?? \App\Models\User::first()?->id;
+            $tarefa = \App\Models\Tarefa::create([
+                'empresa_id' => $empresa->id,
+                'user_id' => $userId,
+                'tipo' => 'import_nfe_xml',
+                'mensagem' => "Importar XML: " . $request->file('xml')->getClientOriginalName(),
+                'status' => 'processando',
+                'total' => 1,
+            ]);
 
-            $fiscalService = new \App\Services\FiscalService;
-            $result = $fiscalService->importXml($xmlContent, $empresa->id);
+            // Dispatch job para processar em background
+            \App\Jobs\ImportarNfeXmlJob::dispatch($empresa->id, $uploadedPath, $tarefa->id);
 
             return response()->json([
                 'success' => true,
-                'message' => 'XML importado com sucesso',
-                'data' => $result,
+                'message' => 'XML enviado para processamento em background. Acompanhe em Tarefas.',
+                'job_id' => $tarefa->id,
             ]);
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => 'Erro: '.$e->getMessage()]);
+            return response()->json(['success' => false, 'message' => 'Erro ao iniciar importação: '.$e->getMessage()]);
         }
     }
 
@@ -377,16 +389,15 @@ class NfeController extends Controller
             for ($i = 0; $i < $zip->numFiles; $i++) {
                 $fileName = $zip->getNameIndex($i);
 
-                if (substr($fileName, -1) === '/' || strtolower(pathinfo($fileName, PATHINFO_EXTENSION)) !== 'xml') {
-                    continue;
+                // Agora captura todos os arquivos .xml independentemente da pasta
+                if (substr($fileName, -1) !== '/' && strtolower(pathinfo($fileName, PATHINFO_EXTENSION)) === 'xml') {
+                    $files[] = [
+                        'type' => 'zip_content',
+                        'path' => $fullPath,
+                        'index' => $i,
+                        'name' => basename($fileName)
+                    ];
                 }
-
-                $files[] = [
-                    'type' => 'zip_content',
-                    'path' => $fullPath,
-                    'index' => $i,
-                    'name' => basename($fileName)
-                ];
             }
 
             $zip->close();
@@ -447,9 +458,9 @@ class NfeController extends Controller
                 'empresa_id' => $empresa->id,
                 'user_id' => $userId,
                 'tipo' => 'import_nfe_bling',
-                'descricao' => "Importar NF-es do Bling de {$request->data_inicio} até {$request->data_fim}",
+                'mensagem' => "Importar NF-es do Bling de {$request->data_inicio} até {$request->data_fim}",
                 'status' => 'processando',
-                'progresso' => 0,
+                'total' => 1,
             ]);
 
             // Dispatch job para processar em background

@@ -73,6 +73,9 @@ class SefazEngine
             $tools = new Tools(json_encode($config), $certificate);
             $tools->model('55');
 
+            // 1. Manifestar notas pendentes caso auto_ciencia esteja ativo
+            $this->manifestarPendentes($empresa, $tools);
+
             // 2. Chamada DistDFe (Ultimo NSU)
             $lastNsu = $empresa->last_nsu ?? 0;
             $resp = $tools->sefazDistDFe($lastNsu);
@@ -120,67 +123,41 @@ class SefazEngine
             $tools = new Tools($configJson, $certificate);
             $tools->model('55');
 
+            // Nota: manifestarPendentes é executado apenas no buscarNovasNotas,
+            // não aqui para evitar consumo indevido da cota da SEFAZ
             $ultNSU = $nsuInicial;
-            $maxNSU = $ultNSU;
             $totalProcessados = 0;
-            $iCount = 0;
 
-            // Loop de busca por NSU
-            while ($ultNSU <= $maxNSU && $iCount < $maxConsultas) {
-                $iCount++;
-                
-                Log::info("Busca NSU {$iCount}/{$maxConsultas}: consultando a partir do NSU {$ultNSU}");
+            // SEFAZ limita a 1 requisção DistDFe por hora por CNPJ.
+            // Fazemos apenas 1 lote por execução e salvamos o NSU para continuar na próxima.
+            Log::info("Busca NSU: consultando a partir do NSU {$ultNSU}");
 
-                try {
-                    // Usa o método nativo do nfephp
-                    $resp = $tools->sefazDistDFe($ultNSU);
-                    
-                    // Processa o retorno
-                    $result = $this->processResponse($resp, $empresa);
-                    
-                    $totalProcessados += $result['count'] ?? 0;
-                    $ultNSU = ($result['maxNsu'] ?? $ultNSU) + 1;
-                    $maxNSU = $result['maxNsu'] ?? $ultNSU;
-                    
-                    Log::info("NSU processados: {$result['count']}, próximo NSU: {$ultNSU}, max NSU: {$maxNSU}");
-                    
-                    // Verifica se chegou ao final
-                    if ($ultNSU > $maxNSU) {
-                        Log::info("Chegou ao final dos documentos disponíveis");
-                        break;
-                    }
-                    
-                    // Pausa entre consultas para evitar bloqueios
-                    sleep(2);
-                    
-                } catch (\Exception $e) {
-                    $erroMsg = $e->getMessage();
-                    
-                    // Verifica se é erro de consumo indevido (bloqueio)
-                    if (strpos($erroMsg, '656') !== false || strpos($erroMsg, 'Consumo Indevido') !== false) {
-                        Log::warning("Bloqueio da SEFAZ detectado. Interrompendo busca.");
-                        throw new \Exception("Bloqueio da SEFAZ: Aguarde 1 hora antes de nova consulta.");
-                    }
-                    
-                    Log::error("Erro na consulta NSU {$ultNSU}: " . $erroMsg);
-                    break;
-                }
-            }
+            $resp = $tools->sefazDistDFe($ultNSU);
 
-            // Atualiza o último NSU processado
+            $result = $this->processResponse($resp, $empresa);
+            $totalProcessados = $result['count'] ?? 0;
+
+            $batchLastNsu = $result['lastNsu'] ?? $ultNSU;
+            $globalMaxNsu = $result['maxNsu'] ?? $ultNSU;
+
+            Log::info("NSU processados no lote: {$totalProcessados}, último NSU do lote: {$batchLastNsu}, Limite Global: {$globalMaxNsu}");
+
+            // Salva o NSU do lote atual para continuar na próxima execução agendada
             $empresa->update([
-                'last_nsu' => $maxNSU,
+                'last_nsu' => $batchLastNsu,
                 'last_sefaz_query_at' => now(),
             ]);
 
-            Log::info("Busca por NSU concluída. Total processados: {$totalProcessados}, NSU final: {$maxNSU}");
+            $hasMore = ($batchLastNsu < $globalMaxNsu);
+
+            Log::info("Busca NSU concluída. Processados: {$totalProcessados}, NSU salvo: {$batchLastNsu}" . ($hasMore ? ", há mais documentos (máx: {$globalMaxNsu})" : ", fila esgotada."));
 
             return [
-                'success' => true, 
+                'success' => true,
                 'count' => $totalProcessados,
-                'ultNSU' => $ultNSU,
-                'maxNSU' => $maxNSU,
-                'consultas' => $iCount
+                'lastNsu' => $batchLastNsu,
+                'maxNsu' => $globalMaxNsu,
+                'hasMore' => $hasMore,
             ];
 
         } catch (\Exception $e) {
@@ -375,7 +352,8 @@ class SefazEngine
             throw new \Exception("Erro SEFAZ: {$xml->cStat} - {$xml->xMotivo}");
         }
 
-        $maxNsu = $empresa->last_nsu ?? 0;
+        $globalMaxNsu = (int) $xml->maxNSU;
+        $batchMaxNsu = $empresa->last_nsu ?? 0;
         $count = 0;
 
         // Debug: verificar se há documentos no retorno
@@ -385,7 +363,7 @@ class SefazEngine
         if (isset($xml->loteDistDFeInt->docZip)) {
             foreach ($xml->loteDistDFeInt->docZip as $doc) {
                 $nsu = (int) $doc['NSU'];
-                $maxNsu = max($maxNsu, $nsu);
+                $batchMaxNsu = max($batchMaxNsu, $nsu);
 
                 $schema = (string) $doc['schema'];
                 $content = (string) $doc;
@@ -413,7 +391,11 @@ class SefazEngine
             }
         }
 
-        return ['count' => $count, 'maxNsu' => $maxNsu];
+        return [
+            'count' => $count, 
+            'lastNsu' => $batchMaxNsu, 
+            'maxNsu' => $globalMaxNsu
+        ];
     }
 
     private function processarResumo($xmlContent, Empresa $empresa)
@@ -517,7 +499,7 @@ class SefazEngine
         
         if ($nfe) {
             $status = 'sem_manifesto';
-            if ($tpEvento === '210200') $status = 'ciencia_operacao';
+            if ($tpEvento === '210200') $status = 'ciencia';
             if ($tpEvento === '210210') $status = 'confirmada';
             if ($tpEvento === '210220') $status = 'nao_realizada';
             if ($tpEvento === '210240') $status = 'desconhecida';
@@ -541,16 +523,22 @@ class SefazEngine
                 return;
             }
 
-            // Extrai a chave da NFe do evento
-            $chNFe = '';
-            if (isset($xml->evento->infEvent->chNFe)) {
-                $chNFe = (string) $xml->evento->infEvent->chNFe;
-            } elseif (isset($xml->procEvento->evento->infEvent->chNFe)) {
-                $chNFe = (string) $xml->procEvento->evento->infEvent->chNFe;
+            // Extrai a chave da NFe do evento (pode estar em variados caminhos dependendo do schema)
+            $chNFe = (string) ($xml->evento->infEvent->chNFe ?? 
+                               $xml->procEvento->evento->infEvent->chNFe ?? 
+                               $xml->infEvent->chNFe ?? 
+                               '');
+
+            if (empty($chNFe)) {
+                // Tenta via xpath em caso de caminhos não mapeados
+                $nodes = $xml->xpath('//chNFe');
+                if (!empty($nodes)) {
+                    $chNFe = (string) $nodes[0];
+                }
             }
 
             if (empty($chNFe)) {
-                Log::warning("Evento sem chave NFe encontrada");
+                Log::warning("DEBUG SEFAZ - Evento sem chave NFe encontrada para XML recebido.");
                 return;
             }
 
@@ -568,7 +556,7 @@ class SefazEngine
             
             if ($nfe) {
                 $status = $nfe->status_manifestacao;
-                if ($tpEvento === '210200') $status = 'ciencia_operacao';
+                if ($tpEvento === '210200') $status = 'ciencia';
                 if ($tpEvento === '210210') $status = 'confirmada';
                 if ($tpEvento === '210220') $status = 'nao_realizada';
                 if ($tpEvento === '210240') $status = 'desconhecida';
@@ -581,6 +569,89 @@ class SefazEngine
             }
         } catch (\Exception $e) {
             Log::error("DEBUG SEFAZ - Erro ao importar Evento Completo via FiscalService: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Realiza a manifestação de uma única NF-e.
+     */
+    public function manifestar(Empresa $empresa, string $chNFe, string $tpEvento, string $xJust = '', ?Tools $tools = null)
+    {
+        if (! $empresa->certificado_a1_path || ! $empresa->certificado_senha) {
+            throw new \Exception('Certificado Digital não configurado para esta empresa.');
+        }
+
+        try {
+            if (!$tools) {
+                $certificate = $this->getCertificate($empresa);
+                $config = $this->getConfig($empresa);
+                $tools = new Tools(json_encode($config), $certificate);
+                $tools->model('55');
+            }
+
+            $resp = $tools->sefazManifesta($chNFe, $tpEvento, $xJust, 1);
+
+            $st = new Standardize();
+            $xmlResp = $st->simpleXml($resp);
+
+            $cStat = (string) $xmlResp->retEvento->infEvento->cStat;
+            $xMotivo = (string) $xmlResp->retEvento->infEvento->xMotivo;
+
+            // 135 = Evento registrado e vinculado
+            // 136 = Evento registrado e vinculado a NF-e cancelada
+            // 573 = Duplicidade de evento (já manifestada)
+            if (in_array($cStat, ['135', '136', '573'])) {
+                 Log::info("Manifestação {$tpEvento} sucesso para {$chNFe} - {$xMotivo}");
+                 return true;
+            }
+
+            Log::warning("Erro na manifestação da NF-e {$chNFe}: {$cStat} - {$xMotivo}");
+            return false;
+
+        } catch (\Exception $e) {
+            Log::error("Erro ao manifestar NF-e {$chNFe}: ".$e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Manifesta notas pendentes se a empresa tiver auto_ciencia ativo.
+     * Limita a 20 notas para evitar timeout e bloqueios
+     */
+    public function manifestarPendentes(Empresa $empresa, ?Tools $tools = null)
+    {
+        if (! $empresa->auto_ciencia) {
+            return;
+        }
+
+        $pendentes = NfeRecebida::where('empresa_id', $empresa->id)
+            ->where('status_manifestacao', 'sem_manifesto')
+            ->limit(20)
+            ->get();
+
+        if ($pendentes->count() === 0) {
+            return;
+        }
+
+        Log::info("Iniciando auto-manifestação de {$pendentes->count()} notas para empresa {$empresa->id}");
+
+        foreach ($pendentes as $nfe) {
+            try {
+                // 210200 = Ciência da Operação
+                $sucesso = $this->manifestar($empresa, $nfe->chave, '210200', '', $tools);
+                
+                if ($sucesso) {
+                    $nfe->update([
+                        'status_manifestacao' => 'ciencia',
+                        'data_manifestacao' => now(),
+                    ]);
+                }
+                
+                // Pausa curta entre eventos para evitar erro de consumo indevido da SEFAZ
+                sleep(2);
+            } catch (\Exception $e) {
+                Log::error("Exceção ao manifestar NFe {$nfe->chave}: " . $e->getMessage());
+            }
         }
     }
 

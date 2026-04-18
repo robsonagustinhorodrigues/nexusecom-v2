@@ -26,6 +26,8 @@ return Application::configure(basePath: dirname(__DIR__))
                 'webhooks/meli',
                 'webhooks/bling',
                 'webhooks/health',
+                'api/nfes/import-zip',
+                'api/nfes/import-xml',
             ]
         );
     })
