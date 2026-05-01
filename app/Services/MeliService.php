@@ -370,29 +370,42 @@ class MeliService
     /**
      * Busca promoções ativas de um vendedor
      */
-    public function getPromocoesAtivas(Integracao $integracao): array
+    public function getPromocoes(Integracao $integracao, string $status = 'active'): array
     {
         $accessToken = $integracao->access_token;
         $userId = $integracao->external_user_id;
 
         try {
+            // ML API v2 for promotions
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer '.$accessToken,
-                'version' => 'v2',
+                'version' => 'v2', // Some docs use this
+                'X-Version' => '2', // Others use this
             ])->get('https://api.mercadolibre.com/seller-promotions/promotions', [
                 'user_id' => $userId,
-                'status' => 'active',
+                'status' => $status,
             ]);
 
             if ($response->successful()) {
                 $data = $response->json();
-
+                Log::info('MeliService getPromocoes success', [
+                    'status' => $status, 
+                    'count' => count($data['results'] ?? []),
+                    'user_id' => $userId
+                ]);
                 return $data['results'] ?? [];
             }
 
+            Log::error('MeliService getPromocoes error', [
+                'status' => $response->status(),
+                'body' => $response->body(),
+                'user_id' => $userId,
+                'req_status' => $status
+            ]);
+
             return [];
         } catch (\Exception $e) {
-            Log::error('Erro ao buscar promoções ativas: '.$e->getMessage());
+            Log::error('Erro ao buscar promoções: '.$e->getMessage());
 
             return [];
         }
@@ -429,21 +442,24 @@ class MeliService
 
     /**
      * Sincroniza promoções para todos os anúncios de uma integração
+     * e salva no MarketplaceAnuncio.
      */
     public function syncPromocoes(Integracao $integracao): array
     {
-        $promocoes = $this->getPromocoesAtivas($integracao);
-
+        $promocoesAtivas = $this->getPromocoes($integracao, 'active');
         $itensPromocao = [];
+        $idsAtivos = [];
 
-        foreach ($promocoes as $promocao) {
+        foreach ($promocoesAtivas as $promocao) {
             $tipo = $promocao['promotion_type'] ?? '';
             $promocaoId = $promocao['id'] ?? '';
 
             if ($promocaoId) {
                 $itens = $this->getItensPromocao($integracao, $promocaoId, $tipo);
                 foreach ($itens as $item) {
-                    $itensPromocao[$item['item_id']] = [
+                    $itemId = $item['item_id'];
+                    $idsAtivos[] = $itemId;
+                    $itensPromocao[$itemId] = [
                         'tipo' => $tipo,
                         'id' => $promocaoId,
                         'deal_price' => floatval($item['deal_price'] ?? 0),
@@ -456,7 +472,64 @@ class MeliService
             }
         }
 
-        return $itensPromocao;
+        // Atualizar banco de dados para os anúncios da integração
+        if (!empty($idsAtivos)) {
+            $idsChunks = array_chunk($idsAtivos, 100);
+            foreach ($idsChunks as $chunk) {
+                $anuncios = MarketplaceAnuncio::where('integracao_id', $integracao->id)
+                    ->whereIn('external_id', $chunk)
+                    ->get();
+
+                foreach ($anuncios as $anuncio) {
+                    $dadosPromo = $itensPromocao[$anuncio->external_id] ?? null;
+                    if ($dadosPromo) {
+                        $anuncio->update([
+                            'promocao_id' => $dadosPromo['id'],
+                            'promocao_tipo' => $dadosPromo['tipo'],
+                            'preco_original' => $dadosPromo['original_price'],
+                            'promocao_valor' => $dadosPromo['deal_price'],
+                            'promocao_desconto' => $dadosPromo['discount_percent'],
+                            'promocao_inicio' => $dadosPromo['start_date'],
+                            'promocao_fim' => $dadosPromo['finish_date'],
+                        ]);
+                    }
+                }
+            }
+        }
+
+        // Limpar promoções que não estão mais ativas
+        if (!empty($idsAtivos)) {
+            MarketplaceAnuncio::where('integracao_id', $integracao->id)
+                ->whereNotNull('promocao_id')
+                ->whereNotIn('external_id', $idsAtivos)
+                ->update([
+                    'promocao_id' => null,
+                    'promocao_tipo' => null,
+                    'preco_original' => null,
+                    'promocao_valor' => null,
+                    'promocao_desconto' => null,
+                    'promocao_inicio' => null,
+                    'promocao_fim' => null,
+                ]);
+        } else {
+            MarketplaceAnuncio::where('integracao_id', $integracao->id)
+                ->whereNotNull('promocao_id')
+                ->update([
+                    'promocao_id' => null,
+                    'promocao_tipo' => null,
+                    'preco_original' => null,
+                    'promocao_valor' => null,
+                    'promocao_desconto' => null,
+                    'promocao_inicio' => null,
+                    'promocao_fim' => null,
+                ]);
+        }
+
+        return [
+            'success' => true,
+            'count' => count($itensPromocao),
+            'items' => $itensPromocao
+        ];
     }
 
     /**

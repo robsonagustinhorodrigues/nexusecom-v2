@@ -56,7 +56,7 @@ class SefazEngine
             throw new \Exception('Certificado Digital não configurado para esta empresa.');
         }
 
-        $intervaloHoras = $empresa->sefaz_intervalo_horas ?? 6;
+        $intervaloHoras = $empresa->sefaz_intervalo_horas ?? 1;
         $intervaloMinutos = $intervaloHoras * 60;
 
         // Bloqueio baseado no intervalo configurado
@@ -76,22 +76,49 @@ class SefazEngine
             // 1. Manifestar notas pendentes caso auto_ciencia esteja ativo
             $this->manifestarPendentes($empresa, $tools);
 
-            // 2. Chamada DistDFe (Ultimo NSU)
-            $lastNsu = $empresa->last_nsu ?? 0;
-            $resp = $tools->sefazDistDFe($lastNsu);
+            // 2. Chamada DistDFe (Loop para buscar todos os NSUs pendentes)
+            $currentNsu = $empresa->last_nsu ?? 0;
+            $totalCount = 0;
+            $maxBatches = 20; // Limite de segurança (1000 documentos)
+            $batchCount = 0;
+            $finalMaxNsu = $currentNsu;
 
-            // 3. Processamento do Retorno
-            $result = $this->processResponse($resp, $empresa);
+            do {
+                $batchCount++;
+                Log::info("Busca SEFAZ [Lote {$batchCount}] para {$empresa->nome}: consultando a partir do NSU {$currentNsu}");
+                
+                $resp = $tools->sefazDistDFe($currentNsu);
+                $result = $this->processResponse($resp, $empresa);
+                
+                $countInBatch = $result['count'] ?? 0;
+                $totalCount += $countInBatch;
+                $currentNsu = $result['lastNsu'] ?? $currentNsu;
+                $finalMaxNsu = $result['maxNsu'] ?? $finalMaxNsu;
+                
+                // Se o último NSU do lote ainda é menor que o máximo global, continua
+                $hasMore = ($currentNsu < $finalMaxNsu && $countInBatch > 0);
+                
+                // Atualiza NSU e Horário após cada lote com sucesso
+                $empresa->update([
+                    'last_nsu' => $currentNsu,
+                    'last_sefaz_query_at' => now(),
+                ]);
 
-            // Atualiza NSU e Horário
-            $empresa->update([
-                'last_nsu' => $result['maxNsu'] ?? $lastNsu,
-                'last_sefaz_query_at' => now(),
-            ]);
+                if ($hasMore && $batchCount < $maxBatches) {
+                    // Pausa curta para evitar erro 656 (Consumo Indevido)
+                    sleep(1);
+                }
 
-            Log::info('Busca SEFAZ concluída. NSU final: '.($result['maxNsu'] ?? $lastNsu).', Documentos processados: '.($result['count'] ?? 0));
+            } while ($hasMore && $batchCount < $maxBatches);
 
-            return $result;
+            Log::info("Busca SEFAZ concluída para {$empresa->nome}. Total: {$totalCount} docs em {$batchCount} lotes. NSU final: {$currentNsu}");
+
+            return [
+                'count' => $totalCount,
+                'maxNsu' => $finalMaxNsu,
+                'lastNsu' => $currentNsu,
+                'batchCount' => $batchCount
+            ];
 
         } catch (\Exception $e) {
             Log::error('Erro na busca SEFAZ: '.$e->getMessage());
@@ -125,39 +152,47 @@ class SefazEngine
 
             // Nota: manifestarPendentes é executado apenas no buscarNovasNotas,
             // não aqui para evitar consumo indevido da cota da SEFAZ
-            $ultNSU = $nsuInicial;
-            $totalProcessados = 0;
+            $currentNsu = $nsuInicial;
+            $totalCount = 0;
+            $maxBatches = 20; 
+            $batchCount = 0;
+            $finalMaxNsu = $currentNsu;
 
-            // SEFAZ limita a 1 requisção DistDFe por hora por CNPJ.
-            // Fazemos apenas 1 lote por execução e salvamos o NSU para continuar na próxima.
-            Log::info("Busca NSU: consultando a partir do NSU {$ultNSU}");
+            do {
+                $batchCount++;
+                Log::info("Busca NSU [Lote {$batchCount}] para {$empresa->nome}: consultando a partir do NSU {$currentNsu}");
+                
+                $resp = $tools->sefazDistDFe($currentNsu);
+                $result = $this->processResponse($resp, $empresa);
+                
+                $countInBatch = $result['count'] ?? 0;
+                $totalCount += $countInBatch;
+                $currentNsu = $result['lastNsu'] ?? $currentNsu;
+                $finalMaxNsu = $result['maxNsu'] ?? $finalMaxNsu;
+                
+                $hasMore = ($currentNsu < $finalMaxNsu && $countInBatch > 0);
+                
+                // Salva o NSU do lote atual para continuar na próxima execução agendada
+                $empresa->update([
+                    'last_nsu' => $currentNsu,
+                    'last_sefaz_query_at' => now(),
+                ]);
 
-            $resp = $tools->sefazDistDFe($ultNSU);
+                if ($hasMore && $batchCount < $maxBatches) {
+                    sleep(1);
+                }
 
-            $result = $this->processResponse($resp, $empresa);
-            $totalProcessados = $result['count'] ?? 0;
+            } while ($hasMore && $batchCount < $maxBatches);
 
-            $batchLastNsu = $result['lastNsu'] ?? $ultNSU;
-            $globalMaxNsu = $result['maxNsu'] ?? $ultNSU;
-
-            Log::info("NSU processados no lote: {$totalProcessados}, último NSU do lote: {$batchLastNsu}, Limite Global: {$globalMaxNsu}");
-
-            // Salva o NSU do lote atual para continuar na próxima execução agendada
-            $empresa->update([
-                'last_nsu' => $batchLastNsu,
-                'last_sefaz_query_at' => now(),
-            ]);
-
-            $hasMore = ($batchLastNsu < $globalMaxNsu);
-
-            Log::info("Busca NSU concluída. Processados: {$totalProcessados}, NSU salvo: {$batchLastNsu}" . ($hasMore ? ", há mais documentos (máx: {$globalMaxNsu})" : ", fila esgotada."));
+            Log::info("Busca NSU concluída. Processados: {$totalCount}, NSU salvo: {$currentNsu}" . ($hasMore ? ", há mais documentos (máx: {$finalMaxNsu})" : ", fila esgotada."));
 
             return [
                 'success' => true,
-                'count' => $totalProcessados,
-                'lastNsu' => $batchLastNsu,
-                'maxNsu' => $globalMaxNsu,
+                'count' => $totalCount,
+                'lastNsu' => $currentNsu,
+                'maxNsu' => $finalMaxNsu,
                 'hasMore' => $hasMore,
+                'batchCount' => $batchCount
             ];
 
         } catch (\Exception $e) {
@@ -346,9 +381,23 @@ class SefazEngine
 
         if ((string) $xml->cStat != '138') {
             Log::info("Retorno SEFAZ: {$xml->cStat} - {$xml->xMotivo}");
+            
+            // Status 137 = Nenhum documento localizado
             if ((string) $xml->cStat == '137') {
-                return ['count' => 0, 'maxNsu' => $empresa->last_nsu ?? 0];
+                $ultNsu = (int) $xml->ultNSU;
+                return ['count' => 0, 'lastNsu' => $ultNsu ?: ($empresa->last_nsu ?? 0), 'maxNsu' => $ultNsu ?: ($empresa->last_nsu ?? 0)];
             }
+            
+            // Status 656 = Consumo Indevido - SEFAZ retorna o ultNSU correto que devemos usar
+            if ((string) $xml->cStat == '656') {
+                $ultNsu = (int) $xml->ultNSU;
+                if ($ultNsu > 0) {
+                    Log::warning("SEFAZ 656: Atualizando NSU de {$empresa->last_nsu} para {$ultNsu} conforme indicado pela SEFAZ.");
+                    $empresa->update(['last_nsu' => $ultNsu]);
+                }
+                throw new \Exception("Erro SEFAZ: {$xml->cStat} - {$xml->xMotivo}" . ($ultNsu > 0 ? " (NSU atualizado para {$ultNsu}, tente após 1 hora)" : ''));
+            }
+            
             throw new \Exception("Erro SEFAZ: {$xml->cStat} - {$xml->xMotivo}");
         }
 
@@ -523,33 +572,56 @@ class SefazEngine
                 return;
             }
 
-            // Extrai a chave da NFe do evento (pode estar em variados caminhos dependendo do schema)
-            $chNFe = (string) ($xml->evento->infEvent->chNFe ?? 
-                               $xml->procEvento->evento->infEvent->chNFe ?? 
-                               $xml->infEvent->chNFe ?? 
-                               '');
+            // Registra namespace NFe para xpath funcionar com documentos namespaciados
+            $xml->registerXPathNamespace('nfe', 'http://www.portalfiscal.inf.br/nfe');
 
+            // Tenta extrair chNFe em vários caminhos possíveis do procEventoNFe
+            $chNFe = '';
+
+            // Direto no nó raiz (procEventoNFe > evento > infEvento)
             if (empty($chNFe)) {
-                // Tenta via xpath em caso de caminhos não mapeados
+                $nodes = $xml->xpath('//nfe:chNFe');
+                if (!empty($nodes)) $chNFe = (string) $nodes[0];
+            }
+            // Sem namespace
+            if (empty($chNFe)) {
                 $nodes = $xml->xpath('//chNFe');
-                if (!empty($nodes)) {
-                    $chNFe = (string) $nodes[0];
-                }
+                if (!empty($nodes)) $chNFe = (string) $nodes[0];
+            }
+            // Acesso direto a estrutura comum
+            if (empty($chNFe)) {
+                $chNFe = (string) ($xml->evento->infEvento->chNFe
+                    ?? $xml->procEventoNFe->evento->infEvento->chNFe
+                    ?? $xml->evento->infEvent->chNFe
+                    ?? $xml->infEvento->chNFe
+                    ?? $xml->infEvent->chNFe
+                    ?? '');
             }
 
             if (empty($chNFe)) {
-                Log::warning("DEBUG SEFAZ - Evento sem chave NFe encontrada para XML recebido.");
+                Log::warning("DEBUG SEFAZ - Evento sem chave NFe encontrada. Raiz XML: " . $xml->getName());
                 return;
             }
 
-            $tpEvento = isset($xml->evento->infEvent->tpEvento) ? (string) $xml->evento->infEvent->tpEvento : '';
-            $dhEvento = isset($xml->evento->infEvent->dhEvento) ? (string) $xml->evento->infEvent->dhEvento : now();
-            
+            // Tenta extrair tipo e data do evento
+            $tpEvento = '';
+            $dhEvento = now()->toIso8601String();
+
+            $tpNodes = $xml->xpath('//nfe:tpEvento');
+            if (!empty($tpNodes)) $tpEvento = (string) $tpNodes[0];
+            if (empty($tpEvento)) {
+                $tpNodes = $xml->xpath('//tpEvento');
+                if (!empty($tpNodes)) $tpEvento = (string) $tpNodes[0];
+            }
+
+            $dhNodes = $xml->xpath('//nfe:dhEvento');
+            if (!empty($dhNodes)) $dhEvento = (string) $dhNodes[0];
+
             $nomeArquivo = "sefaz_evento_{$chNFe}_{$tpEvento}.xml";
 
             $fiscalService = app(\App\Services\FiscalService::class);
             $fiscalService->importXml($xmlContent, $empresa->id, $nomeArquivo);
-            Log::info("DEBUG SEFAZ - Evento Completo {$chNFe} importado com sucesso via FiscalService.");
+            Log::info("DEBUG SEFAZ - Evento Completo {$chNFe} (tipo: {$tpEvento}) importado com sucesso via FiscalService.");
 
             // Atualiza o status de manifestação na NFe
             $nfe = NfeRecebida::where('chave', $chNFe)->where('empresa_id', $empresa->id)->first();

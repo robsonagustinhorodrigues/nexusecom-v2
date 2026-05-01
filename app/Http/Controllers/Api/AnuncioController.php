@@ -50,6 +50,18 @@ class AnuncioController extends Controller
             });
         }
 
+        if ($request->promocao === 'com_promocao') {
+            $query->whereNotNull('promocao_valor')->where('promocao_valor', '>', 0);
+        } elseif ($request->promocao === 'sem_promocao') {
+            $query->where(function($q) {
+                $q->whereNull('promocao_valor')->orWhere('promocao_valor', '<=', 0);
+            });
+        }
+
+        if ($request->promocao_id) {
+            $query->where('promocao_id', $request->promocao_id);
+        }
+
         if ($request->search) {
             $search = '%'.mb_strtolower($request->search, 'UTF-8').'%';
             $query->where(function ($q) use ($search) {
@@ -143,6 +155,13 @@ class AnuncioController extends Controller
             'imposto_percent' => floatval($lucroData['imposto_percent'] ?? 0),
             'frete' => floatval($lucroData['frete'] ?? 0),
             'frete_gratis' => $lucroData['frete_gratis'] ?? false,
+            
+            // Novos campos de lucro para promoções
+            'lucro_promocao' => floatval($lucroData['lucro_promocao'] ?? 0),
+            'margem_promocao' => floatval($lucroData['margem_promocao'] ?? 0),
+            'taxas_promocao' => floatval($lucroData['taxas_promocao'] ?? 0),
+            'imposto_promocao' => floatval($lucroData['imposto_promocao'] ?? 0),
+
             'medidas' => $medidas,
             'is_catalog' => $isCatalog,
             'has_promotion' => $hasPromotion,
@@ -223,6 +242,19 @@ class AnuncioController extends Controller
         $lucroBruto = $preco - $custoTotal - $valorTaxas - $frete - $imposto;
         $margem = $preco > 0 ? ($lucroBruto / $preco) * 100 : 0;
 
+        $promocaoValor = floatval($anuncio->promocao_valor ?? 0);
+        $lucroPromocao = 0;
+        $margemPromocao = 0;
+        $taxasPromocao = 0;
+        $impostoPromocao = 0;
+
+        if ($promocaoValor > 0) {
+            $impostoPromocao = $promocaoValor * $impostoPercent;
+            $taxasPromocao = $promocaoValor * $taxaPercent;
+            $lucroPromocao = $promocaoValor - $custoTotal - $taxasPromocao - $frete - $impostoPromocao;
+            $margemPromocao = ($lucroPromocao / $promocaoValor) * 100;
+        }
+
         return [
             'preco' => $preco,
             'custo' => $custo,
@@ -236,6 +268,10 @@ class AnuncioController extends Controller
             'imposto' => $imposto,
             'lucro_bruto' => $lucroBruto,
             'margem' => $margem,
+            'lucro_promocao' => $lucroPromocao,
+            'margem_promocao' => $margemPromocao,
+            'taxas_promocao' => $taxasPromocao,
+            'imposto_promocao' => $impostoPromocao,
         ];
     }
 
@@ -377,6 +413,10 @@ class AnuncioController extends Controller
 
                 $service = new \App\Services\MeliService();
                 $syncedCount = $service->syncAnuncios($integracao);
+                
+                // Sincroniza promoções após sincronizar anúncios
+                $promocoesResult = $service->syncPromocoes($integracao);
+                $promoCount = $promocoesResult['count'] ?? 0;
 
                 return response()->json([
                     'success' => true,
@@ -773,6 +813,35 @@ class AnuncioController extends Controller
                     'created_at' => $log->created_at->format('d/m/Y H:i:s'),
                 ];
             }),
+        ]);
+    }
+
+    public function listPromocoes(Request $request)
+    {
+        $empresaId = $request->get('empresa', session('empresa_id', 6));
+        $integracao = \App\Models\Integracao::where('empresa_id', $empresaId)
+            ->where('marketplace', 'mercadolivre')
+            ->first();
+
+        if (!$integracao) {
+            return response()->json(['success' => false, 'message' => 'Integração Mercado Livre não encontrada.'], 404);
+        }
+
+        $meliService = new \App\Services\MeliService();
+        
+        // Buscar ativas, candidatas e outras
+        $ativas = $meliService->getPromocoes($integracao, 'active');
+        $started = $meliService->getPromocoes($integracao, 'started');
+        $pending = $meliService->getPromocoes($integracao, 'pending');
+        $candidatas = $meliService->getPromocoes($integracao, 'candidate');
+
+        // Mesclar ativas com as que já começaram
+        $ativasTotal = array_merge($ativas, $started, $pending);
+
+        return response()->json([
+            'success' => true,
+            'ativas' => $ativasTotal,
+            'candidatas' => $candidatas
         ]);
     }
 }

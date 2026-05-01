@@ -32,8 +32,12 @@
             <div class="bg-slate-800 border border-slate-700 rounded-3xl p-6 shadow-xl hover:border-indigo-500/30 transition-all group relative overflow-hidden">
                 <div class="flex justify-between items-start mb-6">
                     <div class="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-700 flex items-center justify-center overflow-hidden shadow-inner">
-                        <img x-if="empresa.logo_path" :src="'/storage/' + empresa.logo_path" class="w-full h-full object-cover">
-                        <i x-else class="fas fa-building text-slate-700 text-2xl group-hover:rotate-12 transition-transform"></i>
+                        <template x-if="empresa.logo_path">
+                            <img :src="'/media/' + empresa.logo_path" class="w-full h-full object-cover">
+                        </template>
+                        <template x-if="!empresa.logo_path">
+                            <i class="fas fa-building text-slate-700 text-2xl group-hover:rotate-12 transition-transform"></i>
+                        </template>
                     </div>
                     <div class="flex gap-2">
                         <button @click="editEmpresa(empresa)" class="w-9 h-9 rounded-xl bg-slate-700 text-slate-300 flex items-center justify-center hover:bg-indigo-600 hover:text-white transition-all shadow-sm">
@@ -174,8 +178,27 @@
                                 </button>
                             </div>
                         </div>
+
+                        <!-- Status do Upload/Validação -->
+                        <template x-if="certUploadStatus">
+                            <div class="mt-4 px-4 py-3 rounded-xl text-xs font-bold italic"
+                                :class="{
+                                    'bg-yellow-500/10 border border-yellow-500/30 text-yellow-400': certUploadStatus === 'uploading',
+                                    'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400': certUploadStatus === 'success',
+                                    'bg-rose-500/10 border border-rose-500/30 text-rose-400': certUploadStatus === 'error'
+                                }">
+                                <i class="fas mr-2"
+                                    :class="{
+                                        'fa-spinner fa-spin': certUploadStatus === 'uploading',
+                                        'fa-check-circle': certUploadStatus === 'success',
+                                        'fa-exclamation-circle': certUploadStatus === 'error'
+                                    }"></i>
+                                <span x-text="certUploadMsg"></span>
+                            </div>
+                        </template>
                     </div>
                 </div>
+
 
                 <!-- Tab: DANFE -->
                 <div x-show="activeTab === 'danfe'" class="space-y-6">
@@ -183,11 +206,15 @@
                         <div class="md:col-span-1">
                             <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4 italic">Logo do DANFE</label>
                             <label class="relative w-full aspect-square rounded-[2rem] bg-slate-900 border-2 border-dashed border-slate-700 flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500 transition-all overflow-hidden group">
-                                <img x-if="logoPreview" :src="logoPreview" class="w-full h-full object-contain p-4">
-                                <div x-else class="text-center p-4">
-                                    <i class="fas fa-image text-3xl text-slate-700 mb-2"></i>
-                                    <p class="text-[9px] font-black text-slate-600 uppercase tracking-tight">Upload JPG/PNG</p>
-                                </div>
+                                <template x-if="logoPreview">
+                                    <img :src="logoPreview" class="w-full h-full object-contain p-4">
+                                </template>
+                                <template x-if="!logoPreview">
+                                    <div class="text-center p-4">
+                                        <i class="fas fa-image text-3xl text-slate-700 mb-2"></i>
+                                        <p class="text-[9px] font-black text-slate-600 uppercase tracking-tight">Upload JPG/PNG</p>
+                                    </div>
+                                </template>
                                 <input type="file" @change="handleLogoUpload" accept="image/*" class="absolute inset-0 opacity-0 cursor-pointer">
                             </label>
                         </div>
@@ -327,6 +354,8 @@ function empresasPage() {
             danfe_show_valor_total: true, danfe_show_qrcode: true,
             repricer_enabled: false, repricer_intervalo_horas: 3, repricer_ultima_execucao: null
         },
+        certUploadStatus: null, // null | 'uploading' | 'success' | 'error'
+        certUploadMsg: '',
         
         async init() {
             await this.loadEmpresas();
@@ -352,7 +381,7 @@ function empresasPage() {
             this.isEditing = true;
             this.activeTab = 'basic';
             this.form = { ...empresa };
-            this.logoPreview = empresa.logo_path ? '/storage/' + empresa.logo_path : null;
+            this.logoPreview = empresa.logo_path ? '/media/' + empresa.logo_path : null;
             this.showModal = true;
         },
         
@@ -375,12 +404,81 @@ function empresasPage() {
             reader.readAsDataURL(file);
         },
 
-        handleCertUpload(e) {
-            alert('Upload de certificado via API em desenvolvimento.');
+        async handleCertUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            if (!this.form.id) {
+                this.certUploadStatus = 'error';
+                this.certUploadMsg = 'Salve a empresa antes de enviar o certificado.';
+                return;
+            }
+
+            if (!this.form.certificado_senha) {
+                this.certUploadStatus = 'error';
+                this.certUploadMsg = 'Preencha a senha do certificado antes de fazer o upload.';
+                return;
+            }
+
+            this.certUploadStatus = 'uploading';
+            this.certUploadMsg = 'Enviando e validando certificado...';
+
+            const formData = new FormData();
+            formData.append('certificado', file);
+            formData.append('senha', this.form.certificado_senha);
+            formData.append('_method', 'POST');
+
+            try {
+                const resp = await fetch(`/api/admin/empresas/${this.form.id}/certificado`, {
+                    method: 'POST',
+                    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
+                    body: formData
+                });
+
+                const data = await resp.json();
+
+                if (resp.ok && data.success) {
+                    this.certUploadStatus = 'success';
+                    this.certUploadMsg = '✅ ' + data.message;
+                    await this.loadEmpresas();
+                } else {
+                    this.certUploadStatus = 'error';
+                    this.certUploadMsg = '❌ ' + (data.error || 'Erro ao enviar certificado.');
+                }
+            } catch (err) {
+                this.certUploadStatus = 'error';
+                this.certUploadMsg = '❌ Erro de conexão: ' + err.message;
+            }
         },
-        
+
         async testCertificate() {
-            alert('Enviando requisição de validação para Engine Sefaz...');
+            if (!this.form.id) {
+                alert('Salve a empresa antes de validar o certificado.');
+                return;
+            }
+            // Tenta uma busca SEFAZ de 0 documentos para validar o certificado
+            this.certUploadStatus = 'uploading';
+            this.certUploadMsg = 'Validando certificado com a SEFAZ...';
+            try {
+                const resp = await fetch(`/api/sefaz/testar-certificado/${this.form.id}`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const data = await resp.json();
+                if (resp.ok && data.success) {
+                    this.certUploadStatus = 'success';
+                    this.certUploadMsg = '✅ Certificado válido! ' + (data.message || '');
+                } else {
+                    this.certUploadStatus = 'error';
+                    this.certUploadMsg = '❌ ' + (data.error || data.message || 'Certificado inválido.');
+                }
+            } catch (err) {
+                this.certUploadStatus = 'error';
+                this.certUploadMsg = '❌ Erro: ' + err.message;
+            }
         },
 
         async save() {

@@ -34,6 +34,12 @@
                     </button>
                 </div>
 
+                <button @click="openPromocoesModal()" 
+                    class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 border border-indigo-500 rounded-xl flex items-center gap-3 text-sm text-white font-bold transition-all shadow-lg active:scale-95 shadow-indigo-500/20">
+                    <i class="fas fa-bullhorn"></i>
+                    <span>Campanhas</span>
+                </button>
+
                 <!-- Actions Menu -->
                 <div class="relative">
                     <button @click="actionsDropdownOpen = !actionsDropdownOpen" :disabled="syncing" 
@@ -176,6 +182,11 @@
                     <option value="ativo" class="bg-black">🤖 Ativo</option>
                     <option value="inativo" class="bg-black">💤 Inativo</option>
                 </select>
+                <select x-model="promocaoFilter" @change="loadAnuncios()" class="bg-black border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-slate-300 focus:ring-2 focus:ring-yellow-500/50 outline-none appearance-none cursor-pointer">
+                    <option value="" class="bg-black">Promoções</option>
+                    <option value="com_promocao" class="bg-black">⚡ Com Promoção</option>
+                    <option value="sem_promocao" class="bg-black">➖ Sem Promoção</option>
+                </select>
             </div>
         </div>
     </div>
@@ -201,6 +212,7 @@
                     </div>
                     <div class="flex items-center gap-2">
                         <span x-show="anuncio.is_catalog" class="text-[9px] px-2 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 font-bold uppercase tracking-wider">Catálogo</span>
+                        <span x-show="anuncio.has_promotion" class="text-[9px] px-2 py-0.5 rounded-full bg-orange-500/10 border border-orange-500/20 text-orange-400 font-bold uppercase tracking-wider animate-pulse flex items-center gap-1"><i class="fas fa-bolt"></i> Promo</span>
                         <span class="text-[10px] px-2.5 py-1 rounded-lg font-black uppercase tracking-widest shadow-sm border border-white/5"
                             :class="anuncio.status === 'active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'"
                             x-text="anuncio.status === 'active' ? 'Ativo' : 'Inativo'">
@@ -297,16 +309,23 @@
                     <div class="w-full lg:w-[260px] flex-shrink-0">
                         <div class="bg-slate-900/40 rounded-xl border border-slate-700/50 p-3 h-full flex flex-col justify-center gap-2">
                             <div class="flex justify-between items-center text-[11px]">
-                                <span class="text-slate-500 font-bold uppercase tracking-wider">Preço Venda</span>
-                                <span class="font-black text-white text-sm" x-text="formatMoney(anuncio.preco)"></span>
+                                <span class="text-slate-500 font-bold uppercase tracking-wider" x-text="anuncio.has_promotion ? 'Preço Original' : 'Preço Venda'"></span>
+                                <span class="font-black text-sm" :class="anuncio.has_promotion ? 'line-through text-slate-500' : 'text-white'" x-text="formatMoney(anuncio.preco)"></span>
                             </div>
+                            <template x-if="anuncio.has_promotion">
+                                <div class="flex justify-between items-center text-[11px]">
+                                    <span class="text-orange-400 font-bold uppercase tracking-wider flex items-center gap-1"><i class="fas fa-tag"></i> Valor Promo</span>
+                                    <span class="font-black text-orange-400 text-sm" x-text="formatMoney(anuncio.promocao_valor)"></span>
+                                </div>
+                            </template>
+
                             <div class="flex justify-between items-center text-[11px]">
                                 <span class="text-slate-500 font-bold uppercase tracking-wider">Custo Produto</span>
                                 <span class="font-bold text-red-500/80" x-text="'-' + formatMoney(anuncio.custo || 0)"></span>
                             </div>
                             <div class="flex justify-between items-center text-[11px]">
                                 <span class="text-slate-500 font-bold uppercase tracking-wider">Comissão/Taxa</span>
-                                <span class="font-bold text-amber-500/80" x-text="'-' + formatMoney(anuncio.taxas || 0)"></span>
+                                <span class="font-bold text-amber-500/80" x-text="anuncio.has_promotion ? ('-' + formatMoney(anuncio.taxas_promocao || anuncio.taxas || 0)) : ('-' + formatMoney(anuncio.taxas || 0))"></span>
                             </div>
                             <div class="flex justify-between items-center text-[11px]">
                                 <span class="text-slate-500 font-bold uppercase tracking-wider">Frete/Envio</span>
@@ -314,16 +333,29 @@
                             </div>
                             <div class="flex justify-between items-center text-[11px]">
                                 <span class="text-slate-500 font-bold uppercase tracking-wider">Imposto</span>
-                                <span class="font-bold text-red-400/80" x-text="'-' + formatMoney(anuncio.imposto || 0)"></span>
+                                <span class="font-bold text-red-400/80" x-text="anuncio.has_promotion ? ('-' + formatMoney(anuncio.imposto_promocao || anuncio.imposto || 0)) : ('-' + formatMoney(anuncio.imposto || 0))"></span>
                             </div>
                             
                             <div class="mt-1 pt-2 border-t border-slate-700/50 flex justify-between items-end">
                                 <div class="flex flex-col">
                                     <span class="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">Lucro Líquido</span>
-                                    <span class="text-lg font-black leading-none" :class="(anuncio.lucro || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'" x-text="formatMoney(anuncio.lucro || 0)"></span>
+                                    <template x-if="anuncio.has_promotion">
+                                        <div class="flex items-center gap-1.5">
+                                            <span class="text-xs text-slate-500 line-through" x-text="formatMoney(anuncio.lucro || 0)"></span>
+                                            <span class="text-lg font-black leading-none text-orange-400 drop-shadow-[0_0_8px_rgba(251,146,60,0.3)]" x-text="formatMoney(anuncio.lucro_promocao || 0)"></span>
+                                        </div>
+                                    </template>
+                                    <template x-if="!anuncio.has_promotion">
+                                        <span class="text-lg font-black leading-none" :class="(anuncio.lucro || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'" x-text="formatMoney(anuncio.lucro || 0)"></span>
+                                    </template>
                                 </div>
                                 <div class="text-right">
-                                    <span class="text-[9px] font-black p-1 rounded bg-slate-800 text-slate-500 uppercase border border-slate-700" :class="(anuncio.margem || 0) >= 0 ? 'text-emerald-500/80' : 'text-red-500/80'" x-text="(anuncio.margem || 0).toFixed(1) + '% margem'"></span>
+                                    <template x-if="anuncio.has_promotion">
+                                        <span class="text-[9px] font-black p-1 rounded bg-orange-500/10 text-orange-400 uppercase border border-orange-500/20" x-text="(anuncio.margem_promocao || 0).toFixed(1) + '% margem'"></span>
+                                    </template>
+                                    <template x-if="!anuncio.has_promotion">
+                                        <span class="text-[9px] font-black p-1 rounded bg-slate-800 text-slate-500 uppercase border border-slate-700" :class="(anuncio.margem || 0) >= 0 ? 'text-emerald-500/80' : 'text-red-500/80'" x-text="(anuncio.margem || 0).toFixed(1) + '% margem'"></span>
+                                    </template>
                                 </div>
                             </div>
                         </div>
@@ -545,8 +577,25 @@
                         <td class="px-4 py-3 text-right text-amber-500/80" x-text="formatMoney(anuncio.taxas || 0)"></td>
                         <td class="px-4 py-3 text-right text-amber-500/80" x-text="formatMoney(anuncio.frete || 0)"></td>
                         <td class="px-4 py-3 text-right text-red-400/80" x-text="formatMoney(anuncio.imposto || 0)"></td>
-                        <td class="px-4 py-3 text-right font-bold" :class="(anuncio.lucro || 0) >= 0 ? 'text-green-400' : 'text-red-400'" x-text="formatMoney(anuncio.lucro || 0)"></td>
-                        <td class="px-4 py-3 text-right font-bold" :class="(anuncio.margem || 0) >= 0 ? 'text-green-400' : 'text-red-400'" x-text="(anuncio.margem || 0).toFixed(1) + '%'"></td>
+                        <td class="px-4 py-3 text-right">
+                            <template x-if="anuncio.has_promotion">
+                                <div class="flex flex-col items-end">
+                                    <span class="text-[10px] text-slate-500 line-through" x-text="formatMoney(anuncio.lucro || 0)"></span>
+                                    <span class="font-bold text-orange-400 drop-shadow-[0_0_5px_rgba(251,146,60,0.3)]" x-text="formatMoney(anuncio.lucro_promocao || 0)"></span>
+                                </div>
+                            </template>
+                            <template x-if="!anuncio.has_promotion">
+                                <span class="font-bold" :class="(anuncio.lucro || 0) >= 0 ? 'text-green-400' : 'text-red-400'" x-text="formatMoney(anuncio.lucro || 0)"></span>
+                            </template>
+                        </td>
+                        <td class="px-4 py-3 text-right">
+                            <template x-if="anuncio.has_promotion">
+                                <span class="font-bold text-orange-400" x-text="(anuncio.margem_promocao || 0).toFixed(1) + '%'"></span>
+                            </template>
+                            <template x-if="!anuncio.has_promotion">
+                                <span class="font-bold" :class="(anuncio.margem || 0) >= 0 ? 'text-green-400' : 'text-red-400'" x-text="(anuncio.margem || 0).toFixed(1) + '%'"></span>
+                            </template>
+                        </td>
                         <td class="px-4 py-3 text-center" :class="(anuncio.estoque || 0) > 0 ? 'text-green-400' : 'text-red-400'" x-text="anuncio.estoque || 0"></td>
                         <td class="px-4 py-3 text-center">
                             <div class="flex items-center justify-center gap-1">
@@ -805,6 +854,132 @@
             </div>
         </div>
     </div>
+
+    <!-- Modal de Campanhas/Promoções -->
+    <div x-show="showPromocoesModal" 
+        class="fixed inset-0 z-[100] overflow-y-auto" style="display: none;">
+        <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div x-show="showPromocoesModal" x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="fixed inset-0 transition-opacity" aria-hidden="true">
+                <div class="absolute inset-0 bg-slate-900/90 backdrop-blur-sm"></div>
+            </div>
+
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+            <div x-show="showPromocoesModal" x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100" x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100" x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" 
+                class="inline-block align-bottom bg-slate-900 rounded-2xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full border border-slate-700">
+                
+                <div class="bg-slate-800 px-6 py-4 border-b border-slate-700 flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center">
+                            <i class="fas fa-bullhorn text-indigo-400"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-bold text-white">Campanhas e Promoções</h3>
+                            <p class="text-xs text-slate-400">Visualize as promoções disponíveis no Mercado Livre</p>
+                        </div>
+                    </div>
+                    <button @click="showPromocoesModal = false" class="text-slate-400 hover:text-white transition-colors">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+
+                <div class="px-6 py-6 max-h-[70vh] overflow-y-auto">
+                    <!-- Loading -->
+                    <div x-show="loadingPromocoes" class="py-12 flex flex-col items-center justify-center gap-4">
+                        <i class="fas fa-circle-notch fa-spin text-4xl text-indigo-500"></i>
+                        <p class="text-slate-400 animate-pulse font-medium">Buscando promoções na API do Mercado Livre...</p>
+                    </div>
+
+                    <div x-show="!loadingPromocoes">
+                        <!-- Promoções Ativas (Participando) -->
+                        <div class="mb-8">
+                            <h4 class="text-sm font-bold text-slate-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                                Ativas / Participando
+                            </h4>
+                            
+                            <template x-if="promocoesAtivas.length === 0">
+                                <div class="p-6 bg-slate-800/50 rounded-xl border border-dashed border-slate-700 text-center text-slate-500">
+                                    Nenhuma promoção ativa no momento.
+                                </div>
+                            </template>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <template x-for="promo in promocoesAtivas" :key="promo.id">
+                                    <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 hover:border-indigo-500/50 transition-all group">
+                                        <div class="flex justify-between items-start mb-3">
+                                            <span class="px-2 py-0.5 bg-indigo-500/10 text-indigo-400 text-[10px] font-bold rounded uppercase" x-text="promo.promotion_type"></span>
+                                            <span class="text-[10px] text-slate-500 font-mono" x-text="promo.id"></span>
+                                        </div>
+                                        <h5 class="text-white font-bold mb-1 group-hover:text-indigo-400 transition-colors" x-text="promo.name || 'Promoção Sem Nome'"></h5>
+                                        <div class="flex items-center gap-4 text-xs text-slate-400 mb-4">
+                                            <div class="flex items-center gap-1.5">
+                                                <i class="far fa-calendar-alt"></i>
+                                                <span x-text="formatDate(promo.start_date)"></span>
+                                            </div>
+                                            <div class="flex items-center gap-1.5">
+                                                <i class="fas fa-arrow-right"></i>
+                                                <span x-text="formatDate(promo.finish_date)"></span>
+                                            </div>
+                                        </div>
+                                        <button @click="filterByPromocao(promo)" 
+                                            class="w-full py-2 bg-indigo-600/10 hover:bg-indigo-600 text-indigo-400 hover:text-white text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-2">
+                                            <i class="fas fa-search"></i>
+                                            Ver Itens Participantes
+                                        </button>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Promoções Candidatas (Disponíveis) -->
+                        <div>
+                            <h4 class="text-sm font-bold text-slate-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full bg-yellow-500"></span>
+                                Candidatas / Elegíveis
+                            </h4>
+                            
+                            <template x-if="promocoesCandidatas.length === 0">
+                                <div class="p-6 bg-slate-800/50 rounded-xl border border-dashed border-slate-700 text-center text-slate-500">
+                                    Nenhuma nova promoção disponível.
+                                </div>
+                            </template>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <template x-for="promo in promocoesCandidatas" :key="promo.id">
+                                    <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4 hover:border-yellow-500/30 transition-all">
+                                        <div class="flex justify-between items-start mb-3">
+                                            <span class="px-2 py-0.5 bg-yellow-500/10 text-yellow-500 text-[10px] font-bold rounded uppercase" x-text="promo.promotion_type"></span>
+                                            <span class="text-[10px] text-slate-500 font-mono" x-text="promo.id"></span>
+                                        </div>
+                                        <h5 class="text-slate-300 font-bold mb-1" x-text="promo.name || 'Promoção Elegível'"></h5>
+                                        <div class="flex items-center gap-4 text-xs text-slate-500 mb-4">
+                                            <div class="flex items-center gap-1.5">
+                                                <i class="far fa-calendar-alt"></i>
+                                                <span x-text="formatDate(promo.deadline_date || promo.start_date)"></span>
+                                            </div>
+                                        </div>
+                                        <div class="p-2 bg-yellow-500/5 rounded text-[10px] text-yellow-500/70 border border-yellow-500/10">
+                                            <i class="fas fa-info-circle mr-1"></i> Esta promoção está disponível para adesão.
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-slate-800/50 px-6 py-4 border-t border-slate-700 flex justify-between items-center">
+                    <p class="text-[10px] text-slate-500">
+                        <i class="fas fa-info-circle mr-1"></i> Dados obtidos em tempo real via API do Mercado Livre
+                    </p>
+                    <button @click="showPromocoesModal = false" class="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-bold rounded-xl transition-all">
+                        Fechar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 @endsection
 
@@ -822,8 +997,16 @@ function anunciosPage() {
         tipoFilter: '',
         vinculoFilter: '',
         repricerFilter: '',
+        promocaoFilter: '',
+        promocaoIdFilter: '', // Para filtrar por uma campanha específica
         search: '',
         anuncios: [],
+        
+        // Modal de Promoções/Campanhas
+        showPromocoesModal: false,
+        loadingPromocoes: false,
+        promocoesAtivas: [],
+        promocoesCandidatas: [],
         
         // Vincular modal
         showVincularModal: false,
@@ -883,6 +1066,7 @@ function anunciosPage() {
             if (urlParams.has('tipo')) this.tipoFilter = urlParams.get('tipo');
             if (urlParams.has('vinculo')) this.vinculoFilter = urlParams.get('vinculo');
             if (urlParams.has('repricer')) this.repricerFilter = urlParams.get('repricer');
+            if (urlParams.has('promocao')) this.promocaoFilter = urlParams.get('promocao');
             if (urlParams.has('search')) this.search = urlParams.get('search');
             // if (urlParams.has('page')) this.currentPage = parseInt(urlParams.get('page')); // Se houver paginação no futuro
         },
@@ -894,6 +1078,7 @@ function anunciosPage() {
             if (this.tipoFilter) params.set('tipo', this.tipoFilter);
             if (this.vinculoFilter) params.set('vinculo', this.vinculoFilter);
             if (this.repricerFilter) params.set('repricer', this.repricerFilter);
+            if (this.promocaoFilter) params.set('promocao', this.promocaoFilter);
             if (this.search) params.set('search', this.search);
 
             const newRelativePathQuery = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
@@ -911,6 +1096,8 @@ function anunciosPage() {
                     tipo: this.tipoFilter,
                     vinculo: this.vinculoFilter,
                     repricer: this.repricerFilter,
+                    promocao: this.promocaoFilter,
+                    promocao_id: this.promocaoIdFilter,
                     search: this.search
                 });
                 
@@ -1285,6 +1472,43 @@ function anunciosPage() {
         
         formatMoney(value) {
             return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
+        },
+
+        async openPromocoesModal() {
+            this.showPromocoesModal = true;
+            this.loadPromocoes();
+        },
+
+        async loadPromocoes() {
+            this.loadingPromocoes = true;
+            try {
+                const response = await fetch(`/api/anuncios/promocoes?empresa=${this.empresaId}`);
+                const data = await response.json();
+                if (data.success) {
+                    this.promocoesAtivas = data.ativas || [];
+                    this.promocoesCandidatas = data.candidatas || [];
+                }
+            } catch (e) {
+                console.error('Error loading promocoes:', e);
+            }
+            this.loadingPromocoes = false;
+        },
+
+        filterByPromocao(promocao) {
+            this.promocaoIdFilter = promocao.id;
+            this.promocaoFilter = 'com_promocao';
+            this.showPromocoesModal = false;
+            this.loadAnuncios();
+        },
+
+        formatDate(dateStr) {
+            if (!dateStr) return '-';
+            try {
+                const date = new Date(dateStr);
+                return date.toLocaleDateString('pt-BR');
+            } catch (e) {
+                return dateStr;
+            }
         }
     }
 }

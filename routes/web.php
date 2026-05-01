@@ -2,6 +2,15 @@
 
 use Illuminate\Support\Facades\Route;
 
+// Rota para servir arquivos do storage via Laravel (bypassa o bloqueio do servidor estático)
+Route::get('/media/{path}', function ($path) {
+    $fullPath = storage_path('app/public/' . $path);
+    if (!file_exists($fullPath)) {
+        abort(404);
+    }
+    return response()->file($fullPath);
+})->where('path', '.*');
+
 // Main routes - NEW Alpine pages
 Route::get('/', function () {
     return redirect('/dashboard');
@@ -277,6 +286,7 @@ Route::prefix('api')->middleware('auth')->group(function () {
     Route::delete('/products/{id}', [App\Http\Controllers\Api\ProductController::class, 'destroy']);
 
     Route::get('/anuncios', [App\Http\Controllers\Api\AnuncioController::class, 'index']);
+    Route::get('/anuncios/promocoes', [App\Http\Controllers\Api\AnuncioController::class, 'listPromocoes']);
     Route::get('/anuncios/search-products', [App\Http\Controllers\Api\AnuncioController::class, 'searchProducts']);
     Route::get('/anuncios/{id}', [App\Http\Controllers\Api\AnuncioController::class, 'show']);
     Route::put('/anuncios/{id}', [App\Http\Controllers\Api\AnuncioController::class, 'update']);
@@ -345,7 +355,7 @@ Route::prefix('api')->middleware('auth')->group(function () {
     });
     Route::put('/admin/empresas/{id}', function (\Illuminate\Http\Request $request, $id) {
         $empresa = \App\Models\Empresa::findOrFail($id);
-        $empresa->update($request->all());
+        $empresa->update($request->except(['certificado_a1_path', 'certificado_senha']));
 
         return $empresa;
     });
@@ -354,6 +364,77 @@ Route::prefix('api')->middleware('auth')->group(function () {
         \App\Models\Empresa::findOrFail($id)->delete();
 
         return response()->json(['success' => true]);
+    });
+
+    Route::post('/admin/empresas/{id}/certificado', function (\Illuminate\Http\Request $request, $id) {
+        // Forçar resposta JSON mesmo em erros de validação
+        $request->headers->set('Accept', 'application/json');
+
+        $request->validate([
+            'certificado' => 'required|file|max:5120',
+            'senha'       => 'required|string',
+        ]);
+
+        // Verifica extensão manualmente (pfx ou p12)
+        $extensao = strtolower($request->file('certificado')->getClientOriginalExtension());
+        if (!in_array($extensao, ['pfx', 'p12'])) {
+            return response()->json(['success' => false, 'error' => 'Arquivo inválido. Envie um certificado .pfx ou .p12.'], 422);
+        }
+
+        $empresa = \App\Models\Empresa::findOrFail($id);
+
+        // Salva o arquivo no storage
+        $path = $request->file('certificado')->store('certificados');
+
+        // Valida o certificado antes de salvar
+        try {
+            $pfxContent = \Illuminate\Support\Facades\Storage::get($path);
+            \NFePHP\Common\Certificate::readPfx($pfxContent, $request->senha);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Storage::delete($path);
+
+            // Tenta converter certificado legado
+            if (strpos($e->getMessage(), 'unsupported') !== false || strpos($e->getMessage(), '0308010C') !== false || strpos($e->getMessage(), 'mac verify') !== false) {
+                return response()->json([
+                    'success' => false,
+                    'error'   => 'Certificado inválido ou senha incorreta: ' . $e->getMessage(),
+                ], 422);
+            }
+
+            return response()->json([
+                'success' => false,
+                'error'   => 'Certificado inválido ou senha incorreta: ' . $e->getMessage(),
+            ], 422);
+        }
+
+        // Remove certificado antigo se existir
+        if ($empresa->certificado_a1_path && $empresa->certificado_a1_path !== $path) {
+            \Illuminate\Support\Facades\Storage::delete($empresa->certificado_a1_path);
+        }
+
+        $empresa->update([
+            'certificado_a1_path' => $path,
+            'certificado_senha'   => $request->senha,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Certificado enviado e validado com sucesso!',
+            'path'    => $path,
+        ]);
+    });
+
+    Route::post('/sefaz/testar-certificado/{id}', function ($id) {
+        $empresa = \App\Models\Empresa::findOrFail($id);
+        try {
+            $engine = new \App\Services\SefazEngine();
+            $cert = (new \ReflectionClass($engine))->getMethod('getCertificate');
+            $cert->setAccessible(true);
+            $cert->invoke($engine, $empresa);
+            return response()->json(['success' => true, 'message' => 'Certificado lido e validado com sucesso!']);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'error' => $e->getMessage()], 422);
+        }
     });
 
     Route::get('/admin/configuracoes', function () {
